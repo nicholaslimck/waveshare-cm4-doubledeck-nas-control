@@ -152,9 +152,11 @@ class Display:
         elif temp_t < 50:
             self.disp._pwm1.ChangeDutyCycle(30)
         elif temp_t < 55:
-            self.disp._pwm1.ChangeDutyCycle(50)
+            self.disp._pwm1.ChangeDutyCycle(40)
+        elif temp_t < 60:
+            self.disp._pwm1.ChangeDutyCycle(45)
         else:
-            self.disp._pwm1.ChangeDutyCycle(75)
+            self.disp._pwm1.ChangeDutyCycle(50)
         Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
         self.draw.text((268, 100), str(math.floor(temp_t)) + '℃', fill=0x0088ff, font=Font1)
 
@@ -300,9 +302,11 @@ class Display:
         elif temp_t < 50:
             self.disp._pwm1.ChangeDutyCycle(30)
         elif temp_t < 55:
-            self.disp._pwm1.ChangeDutyCycle(50)
+            self.disp._pwm1.ChangeDutyCycle(40)
+        elif temp_t < 60:
+            self.disp._pwm1.ChangeDutyCycle(45)
         else:
-            self.disp._pwm1.ChangeDutyCycle(75)
+            self.disp._pwm1.ChangeDutyCycle(50)
         Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
         self.draw.text((170, 205), str(math.floor(temp_t)) + '℃', fill=0x0088ff, font=Font1)
 

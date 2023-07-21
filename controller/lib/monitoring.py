@@ -19,10 +19,13 @@ class Disk:
 
 
     def calculate_capacity_and_usage(self, children):
-        self.capacity = sum([int(child['fssize']) for child in children])
-        self.available = sum([int(child['fsavail']) for child in children])
-        self.used = sum([int(child['fsused']) for child in children])
-        self.used_percentage = 100*self.used/self.capacity
+        try:
+            self.capacity = sum([int(child['fssize']) for child in children])
+            self.available = sum([int(child['fsavail']) for child in children])
+            self.used = sum([int(child['fsused']) for child in children])
+            self.used_percentage = 100*self.used/self.capacity
+        except TypeError:
+            pass
 
 
 @dataclass
@@ -36,16 +39,19 @@ class StorageParameters:
     def update(self):
         blockdevices = json.loads(os.popen('lsblk -b -o NAME,FSTYPE,FSSIZE,FSAVAIL,FSUSED --json').read())['blockdevices']
 
-        # Check for RAID volumes
-        if any(['raid' in device['fstype'] for device in blockdevices
-                if device['name'] in [self.disk0.id, self.disk1.id]]):
-            self.raid = True
+        # Only process if blockdevices is populated
+        if blockdevices and len(blockdevices):
+            # Check for RAID volumes
+            if any(['raid' in device['fstype'] for device in blockdevices
+                    if device['name'] in [self.disk0.id, self.disk1.id]]):
+                self.raid = True
 
-        # Calculate capacity and usage of each disk
-        for device in blockdevices:
-            for disk in [self.disk0, self.disk1]:
-                if device['name'] == disk.id:
-                    disk.calculate_capacity_and_usage(children=device['children'])
+            # Calculate capacity and usage of each disk
+            for device in blockdevices:
+                for disk in [self.disk0, self.disk1]:
+                    if device['name'] == disk.id:
+                        if device.get('children'):
+                            disk.calculate_capacity_and_usage(children=device['children'])
 
 
 @dataclass
@@ -65,18 +71,21 @@ class SystemParameters:
 
     def update(self):
         while True:
-            self.disk_parameters.update()
-            self.get_ip_address()
-            self.get_temperature()
-            self.get_rx_speed()
-            self.get_tx_speed()
-            self.get_cpu_usage()
-            self.get_memory_usage()
-            self.get_disk_usage()
+            try:
+                self.disk_parameters.update()
+                self.get_ip_address()
+                self.get_temperature()
+                self.get_rx_speed()
+                self.get_tx_speed()
+                self.get_cpu_usage()
+                self.get_memory_usage()
+                self.get_disk_usage()
 
-            logging.debug(self)
+                logging.debug(self)
 
-            time.sleep(self.update_interval)
+                time.sleep(self.update_interval)
+            except Exception:
+                logging.exception('Parameter update failed')
 
     def get_ip_address(self):
         # There will be exceptions, get stuck, get it carefully
