@@ -5,6 +5,7 @@ import re
 import threading
 import time
 
+import humanize
 import RPi.GPIO as GPIO
 from PIL import Image, ImageDraw, ImageFont
 
@@ -23,7 +24,7 @@ class Display:
 
     def __init__(self):
         # display with hardware SPI:
-        ''' Warning!!!Don't  creation of multiple displayer objects!!! '''
+        # Warning: Don't create multiple display objects!
         # disp = LCD_2inch.LCD_2inch(spi=SPI.SpiDev(bus, device),spi_freq=10000000,rst=RST,dc=DC,bl=BL)
         self.parameters = ReadParameters()
         GPIO.setmode(GPIO.BCM)
@@ -63,30 +64,30 @@ class Display:
             self.image = Image.open('pic/BL.jpg')
 
             self.draw = ImageDraw.Draw(self.image)
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 28)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 28)
             self.draw.text((90, 2), 'Device Status', fill=0xf7ba47, font=Font1)
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=Font1)
             self.draw.text((190, 141), 'RAM', fill=0xf7ba47, font=Font1)
             self.draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=Font1)
             self.draw.text((30, 141), 'CPU', fill=0xf7ba47, font=Font1)
             self.draw.text((107, 141), 'Disk', fill=0xf7ba47, font=Font1)
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 10)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 10)
             self.draw.text((205, 170), 'R X', fill=0xffffff, font=Font1, stroke_width=1)
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 10)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 10)
             self.draw.text((270, 170), 'T X', fill=0xffffff, font=Font1, stroke_width=1)
 
             # TIME 时间
             time_t = time.strftime("%Y-%m-%d   %H:%M:%S", time.localtime())
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((5, 50), time_t, fill=0xf7ba47, font=Font1)
 
             # IP
             ip = self.parameters.get_ip_address()
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((170, 50), 'IP : ' + ip, fill=0xf7ba47, font=Font1)
 
             # CPU usage  CPU使用率
@@ -129,14 +130,14 @@ class Display:
             # TEMP  温度
             self.temp_t = self.parameters.get_temperature()
             if self.temp_t < 45:
-                self.disp._pwm1.ChangeDutyCycle(50)
+                self.disp._pwm1.ChangeDutyCycle(20)
             elif self.temp_t < 50:
-                self.disp._pwm1.ChangeDutyCycle(70)
+                self.disp._pwm1.ChangeDutyCycle(30)
             elif self.temp_t < 55:
-                self.disp._pwm1.ChangeDutyCycle(80)
+                self.disp._pwm1.ChangeDutyCycle(50)
             else:
-                self.disp._pwm1.ChangeDutyCycle(100)
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+                self.disp._pwm1.ChangeDutyCycle(75)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
             self.draw.text((268, 100), str(math.floor(self.temp_t)) + '℃', fill=0x0088ff, font=Font1)
 
             self.draw.arc((253, 80, 313, 142), 0, 360, fill=0xffffff, width=8)
@@ -147,35 +148,35 @@ class Display:
             TX = self.parameters.get_tx_speed() * 1024
 
             if TX < 1024:  # B
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
                 self.draw.text((250, 190), str(math.floor(TX)) + 'B/s', fill=0x00ff00, font=Font1, )
 
             elif TX < (1024 * 1024):  # K
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 17)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 17)
                 self.draw.text((249, 190), str(math.floor(TX / 1024)) + 'KB/s', fill=0x00ffff, font=Font1, )
 
             else:  # M
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
                 self.draw.text((250, 190), str(math.floor(TX / 1024 / 1024)) + 'M/s', fill=0x008fff, font=Font1, )
 
             TX = self.parameters.get_rx_speed() * 1024
 
             if TX < 1024:  # B
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
                 self.draw.text((183, 190), str(math.floor(TX)) + 'B/s', fill=0x00ff00, font=Font1, )
 
             elif TX < (1024 * 1024):  # K
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 17)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 17)
                 self.draw.text((180, 190), str(math.floor(TX / 1024)) + 'KB/s', fill=0x008fff, font=Font1, )
 
             else:  # M
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
                 self.draw.text((181, 190), str(math.floor(TX / 1024 / 1024)) + 'M/s', fill=0x008fff, font=Font1, )
 
                 # memory_percentage  内存百分比
             tot_m, used_m, free_m = map(int, os.popen('free -t -m').readlines()[-1].split()[1:])
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 18)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 18)
             memory_percentage = 100 - free_m / tot_m * 100
 
             if memory_percentage >= 100:
@@ -188,31 +189,34 @@ class Display:
             self.draw.arc((173, 80, 233, 142), -90, -90 + (memory_percentage * 360 / 100), fill=0xf1b400, width=8)
 
             # Disk 使用情况
-            if self.parameters.Get_back[0] == 0:
+            disk_parameters = self.parameters.disk_parameters
+            if disk_parameters.disk0.capacity == 0:
                 self.draw.rectangle((40, 177, 142, 190))
                 self.draw.rectangle((41, 178, 141, 189), fill=0x000000)
             else:
+                usage_percentage = disk_parameters.disk0.usage/disk_parameters.disk0.capacity
                 self.draw.rectangle((40, 177, 142, 190))
-                self.draw.rectangle((41, 178, 41 + self.parameters.Get_back[2], 189), fill=0x7f35e9)
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
-                self.draw.text((80, 176), str(math.floor(self.parameters.Get_back[2])) + '%', fill=0xf1b400, font=Font1, )
+                self.draw.rectangle((41, 178, 41 + usage_percentage, 189), fill=0x7f35e9)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
+                self.draw.text((80, 176), str(math.floor(usage_percentage*100)) + '%', fill=0xf1b400, font=Font1, )
 
-            if self.parameters.Get_back[1] == 0:
+            if disk_parameters.disk1.capacity == 0:
                 self.draw.rectangle((40, 197, 142, 210))
                 self.draw.rectangle((41, 198, 141, 209), fill=0x000000)
             else:
+                usage_percentage = disk_parameters.disk1.usage/disk_parameters.disk1.capacity
                 self.draw.rectangle((40, 197, 142, 210))
-                self.draw.rectangle((41, 198, 41 + self.parameters.Get_back[3], 209), fill=0x7f35e9)
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
-                self.draw.text((80, 196), str(math.floor(self.parameters.Get_back[3])) + '%', fill=0xf1b400, font=Font1, )
-            if self.parameters.Get_back[4] == 1:
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+                self.draw.rectangle((41, 198, 41 + disk_parameters.disk1.usage, 209), fill=0x7f35e9)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
+                self.draw.text((80, 196), str(math.floor(usage_percentage*100)) + '%', fill=0xf1b400, font=Font1, )
+            if disk_parameters.raid:
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
                 self.draw.text((40, 161), 'RAID', fill=0xf7ba47, font=Font1)
 
-            if ((self.parameters.Get_back[0] == 0 and self.parameters.Get_back[1] == 0) or (
-                    self.parameters.Get_back[0] != 0 and self.parameters.Get_back[1] == 0) or (
-                    self.parameters.Get_back[0] == 0 and self.parameters.Get_back[1] != 0)):
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            if ((disk_parameters.disk0.capacity == 0 and disk_parameters.disk1.capacity == 0) or 
+                (disk_parameters.disk0.capacity != 0 and disk_parameters.disk1.capacity == 0) or 
+                (disk_parameters.disk0.capacity == 0 and disk_parameters.disk1.capacity != 0)):
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
                 if (self.parameters.flag > 0):
                     self.draw.text((30, 210), 'Detected but not installed', fill=0xf7ba47, font=Font1)
                 else:
@@ -223,7 +227,7 @@ class Display:
 
         # time.sleep(0.5)
         except IOError as e:
-            logging.info(e)
+            logging.warning(e)
         except KeyboardInterrupt:
             self.disp.module_exit()
             logging.info("quit:")
@@ -234,30 +238,30 @@ class Display:
             self.image = Image.open('pic/Disk.jpg')
 
             self.draw = ImageDraw.Draw(self.image)
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 20)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 20)
             self.draw.text((60, 55), 'CPU Used', fill=0xC1C0BE, font=Font1)
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
             self.draw.text((45, 140), 'Used', fill=0xC1C0BE, font=Font1)
             self.draw.text((45, 163), 'Free', fill=0xC1C0BE, font=Font1)
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 14)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 14)
             self.draw.text((185, 93), 'Disk0:', fill=0xC1C0BE, font=Font1)
             self.draw.text((185, 114), 'Disk1:', fill=0xC1C0BE, font=Font1)
 
             self.draw.text((188, 155), 'TX:', fill=0xC1C0BE, font=Font1)
             self.draw.text((188, 175), 'RX:', fill=0xC1C0BE, font=Font1)
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((133, 205), 'TEMP:', fill=0x0088ff, font=Font1)
 
             # TIME 时间
             time_t = time.strftime("%Y-%m-%d   %H:%M:%S", time.localtime())
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((40, 10), time_t, fill=0xffffff, font=Font1)
 
             # IP
             ip = self.parameters.get_ip_address()
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 17)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 17)
             self.draw.text((155, 58), 'IP : ' + ip, fill=0xC1C0BE, font=Font1)
 
             # CPU usage  CPU使用率
@@ -267,13 +271,13 @@ class Display:
             self.CPU_usagex = 100 - eval(self.CPU_usage[3])
 
             if (self.CPU_usagex >= 100):
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 10)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 10)
                 self.draw.text((80, 107), str(math.floor(self.CPU_usagex)) + '%', fill=0xf1b400, font=Font1, )
             elif (self.CPU_usagex >= 10):
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
                 self.draw.text((79, 105), str(math.floor(self.CPU_usagex)) + '%', fill=0xf1b400, font=Font1, )
             else:
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
                 self.draw.text((81, 104), str(math.floor(self.CPU_usagex)) + '%', fill=0xf1b400, font=Font1, )
 
             self.draw.arc((66, 90, 111, 135), -90, -90 + (self.CPU_usagex * 360 / 100), fill=0x7f35e9, width=3)
@@ -302,7 +306,7 @@ class Display:
 
                     break
             if (self.Used_capacity > 1024 and self.Avail_capacity > 1024):
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
                 self.draw.text((125, 140), 'G', fill=0xC1C0BE, font=Font1)
                 self.draw.text((125, 163), 'G', fill=0xC1C0BE, font=Font1)
                 self.Used_capacity = self.Used_capacity / 1024
@@ -316,7 +320,7 @@ class Display:
                     self.draw.text((85, 140), str(round(self.Used_capacity, 2)), fill=0xC1C0BE, font=Font1, )
                     self.draw.text((85, 163), str(round(self.Avail_capacity, 2)), fill=0xC1C0BE, font=Font1, )
             else:
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 13)
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
                 self.draw.text((125, 140), 'M', fill=0xC1C0BE, font=Font1)
                 self.draw.text((125, 163), 'M', fill=0xC1C0BE, font=Font1)
                 self.Disk_always = self.Used_capacity + self.Avail_capacity
@@ -329,20 +333,20 @@ class Display:
             # TEMP  温度
             temp_t = self.parameters.get_temperature()
             if self.temp_t < 45:
-                self.disp._pwm1.ChangeDutyCycle(50)
+                self.disp._pwm1.ChangeDutyCycle(20)
             elif self.temp_t < 50:
-                self.disp._pwm1.ChangeDutyCycle(70)
+                self.disp._pwm1.ChangeDutyCycle(30)
             elif self.temp_t < 55:
-                self.disp._pwm1.ChangeDutyCycle(80)
+                self.disp._pwm1.ChangeDutyCycle(50)
             else:
-                self.disp._pwm1.ChangeDutyCycle(100)
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+                self.disp._pwm1.ChangeDutyCycle(75)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((170, 205), str(math.floor(temp_t)) + '℃', fill=0x0088ff, font=Font1)
 
             # speed 网速
             TX = self.parameters.get_tx_speed() * 1024
 
-            Font1 = ImageFont.truetype("../Font/Font02.ttf", 15)
+            Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             if (TX < 1024):  # B
                 self.draw.text((210, 154), str(math.floor(TX)) + 'B/s', fill=0x00ff00, font=Font1, )
 
@@ -364,31 +368,32 @@ class Display:
             else:  # M
                 self.draw.text((210, 174), str(math.floor(TX / 1024 / 1024)) + 'M/s', fill=0x008fff, font=Font1, )
 
-                # Disk 使用情况
+            # Disk 使用情况
+            disk_parameters = self.parameters.disk_parameters
 
-            self.Disk0_Avail = self.parameters.Get_back[0] - (self.parameters.Get_back[0] * self.parameters.Get_back[2] // 100)
-            self.Disk1_Avail = self.parameters.Get_back[1] - (self.parameters.Get_back[1] * self.parameters.Get_back[3] // 100)
+            Disk0_Avail = disk_parameters.disk0.capacity - disk_parameters.disk0.usage
+            Disk1_Avail = disk_parameters.disk1.capacity - disk_parameters.disk1.usage
 
-            self.draw.text((240, 93), str(math.floor(self.Disk0_Avail)) + 'G', fill=0xC1C0BE, font=Font1)
-            self.draw.text((240, 114), str(math.floor(self.Disk1_Avail)) + 'G', fill=0xC1C0BE, font=Font1)
+            self.draw.text((240, 93), humanize.naturalsize(Disk0_Avail), fill=0xC1C0BE, font=Font1)
+            self.draw.text((240, 114), humanize.naturalsize(Disk1_Avail), fill=0xC1C0BE, font=Font1)
 
-            if (self.parameters.Get_back[0] == 0):
+            if (disk_parameters.disk0.capacity == 0):
                 self.draw.rectangle((186, 110, 273, 113), fill=0x000000)
             else:
-                self.draw.rectangle((186, 110, 186 + (self.parameters.Get_back[2] * 87 / 100), 113), fill=0x7f35e9)
+                self.draw.rectangle((186, 110, 186 + (disk_parameters.disk0.usage * 87 / 100), 113), fill=0x7f35e9)
 
-            if (self.parameters.Get_back[1] == 0):
+            if (disk_parameters.disk1.capacity == 0):
                 self.draw.rectangle((186, 131, 273, 134), fill=0x000000)
             else:
-                self.draw.rectangle((186, 131, 186 + (self.parameters.Get_back[3] * 87 / 100), 134), fill=0x7f35e9)
+                self.draw.rectangle((186, 131, 186 + (disk_parameters.disk1.usage * 87 / 100), 134), fill=0x7f35e9)
 
-            if self.parameters.Get_back[4] == 1:
+            if disk_parameters.raid:
                 self.draw.text((160, 78), 'RAID', fill=0xC1C0BE, font=Font1)
 
-            if ((self.parameters.Get_back[0] == 0 and self.parameters.Get_back[1] == 0) or (
-                    self.parameters.Get_back[0] != 0 and self.parameters.Get_back[1] == 0) or (
-                    self.parameters.Get_back[0] == 0 and self.parameters.Get_back[1] != 0)):
-                Font1 = ImageFont.truetype("../Font/Font02.ttf", 14)
+            if ((disk_parameters.disk0.capacity == 0 and disk_parameters.disk1.capacity == 0) or 
+                (disk_parameters.disk0.capacity != 0 and disk_parameters.disk1.capacity == 0) or 
+                (disk_parameters.disk0.capacity == 0 and disk_parameters.disk1.capacity != 0)):
+                Font1 = ImageFont.truetype("./Font/Font02.ttf", 14)
                 if (self.parameters.flag > 0):
                     self.draw.text((155, 135), 'Detected but not installed', fill=0xC1C0BE, font=Font1)
                 else:
