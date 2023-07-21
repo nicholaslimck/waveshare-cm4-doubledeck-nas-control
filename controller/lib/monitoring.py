@@ -13,20 +13,16 @@ from psutil._common import sdiskusage
 class Disk:
     id: str
     capacity: int = 0
-    usage: int = 0
+    available: int = 0
+    used: int = 0
+    used_percentage: float = 0.0
+
 
     def calculate_capacity_and_usage(self, children):
-        total_capacity = 0
-        total_usage = 0
-        for child in children:
-            capacity = int(child['fsavail'])
-            usage = float(child['fsuse%'].strip('%'))/100 * capacity
-
-            total_capacity += capacity
-            total_usage += usage
-
-        self.capacity = total_capacity
-        self.usage = total_usage
+        self.capacity = sum([int(child['fssize']) for child in children])
+        self.available = sum([int(child['fsavail']) for child in children])
+        self.used = sum([int(child['fsused']) for child in children])
+        self.used_percentage = 100*self.used/self.capacity
 
 
 @dataclass
@@ -38,7 +34,7 @@ class StorageParameters:
     update_interval: int = 1
 
     def update(self):
-        blockdevices = json.loads(os.popen('lsblk  -f -b --json').read())['blockdevices']
+        blockdevices = json.loads(os.popen('lsblk -b -o NAME,FSTYPE,FSSIZE,FSAVAIL,FSUSED --json').read())['blockdevices']
 
         # Check for RAID volumes
         if any(['raid' in device['fstype'] for device in blockdevices

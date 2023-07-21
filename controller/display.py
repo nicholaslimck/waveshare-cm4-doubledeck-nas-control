@@ -99,11 +99,10 @@ class Display:
         self.draw.text((90, 2), 'Device Status', fill=0xf7ba47, font=Font1)
 
         Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
-        self.draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=Font1)
-        self.draw.text((190, 141), 'RAM', fill=0xf7ba47, font=Font1)
-        self.draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=Font1)
         self.draw.text((30, 141), 'CPU', fill=0xf7ba47, font=Font1)
         self.draw.text((107, 141), 'Disk', fill=0xf7ba47, font=Font1)
+        self.draw.text((190, 141), 'RAM', fill=0xf7ba47, font=Font1)
+        self.draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=Font1)
 
         Font1 = ImageFont.truetype("./Font/Font02.ttf", 10)
         self.draw.text((205, 170), 'R X', fill=0xffffff, font=Font1, stroke_width=1)
@@ -206,21 +205,19 @@ class Display:
             self.draw.rectangle((40, 177, 142, 190))
             self.draw.rectangle((41, 178, 141, 189), fill=0x000000)
         else:
-            usage_percentage = disk_parameters.disk0.usage/disk_parameters.disk0.capacity
             self.draw.rectangle((40, 177, 142, 190))
-            self.draw.rectangle((41, 178, 41 + usage_percentage, 189), fill=0x7f35e9)
+            self.draw.rectangle((41, 178, 41 + disk_parameters.disk0.used_percentage, 189), fill=0x7f35e9)
             Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
-            self.draw.text((80, 176), str(math.floor(usage_percentage*100)) + '%', fill=0xf1b400, font=Font1, )
+            self.draw.text((80, 176), str(math.floor(disk_parameters.disk0.used_percentage)) + '%', fill=0xf1b400, font=Font1, )
 
         if disk_parameters.disk1.capacity == 0:
             self.draw.rectangle((40, 197, 142, 210))
             self.draw.rectangle((41, 198, 141, 209), fill=0x000000)
         else:
-            usage_percentage = disk_parameters.disk1.usage/disk_parameters.disk1.capacity
             self.draw.rectangle((40, 197, 142, 210))
-            self.draw.rectangle((41, 198, 41 + disk_parameters.disk1.usage, 209), fill=0x7f35e9)
+            self.draw.rectangle((41, 198, 41 + disk_parameters.disk1.used_percentage, 209), fill=0x7f35e9)
             Font1 = ImageFont.truetype("./Font/Font02.ttf", 13)
-            self.draw.text((80, 196), str(math.floor(usage_percentage*100)) + '%', fill=0xf1b400, font=Font1, )
+            self.draw.text((80, 196), str(math.floor(disk_parameters.disk1.used_percentage)) + '%', fill=0xf1b400, font=Font1, )
         if disk_parameters.raid:
             Font1 = ImageFont.truetype("./Font/Font02.ttf", 15)
             self.draw.text((40, 161), 'RAID', fill=0xf7ba47, font=Font1)
@@ -332,21 +329,18 @@ class Display:
         # Disk 使用情况
         disk_parameters = self.parameters.disk_parameters
 
-        Disk0_Avail = disk_parameters.disk0.capacity - disk_parameters.disk0.usage
-        Disk1_Avail = disk_parameters.disk1.capacity - disk_parameters.disk1.usage
-
-        self.draw.text((240, 93), humanize.naturalsize(Disk0_Avail), fill=0xC1C0BE, font=Font1)
-        self.draw.text((240, 114), humanize.naturalsize(Disk1_Avail), fill=0xC1C0BE, font=Font1)
+        self.draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0.available), fill=0xC1C0BE, font=Font1)
+        self.draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=0xC1C0BE, font=Font1)
 
         if (disk_parameters.disk0.capacity == 0):
             self.draw.rectangle((186, 110, 273, 113), fill=0x000000)
         else:
-            self.draw.rectangle((186, 110, 186 + (disk_parameters.disk0.usage * 87 / 100), 113), fill=0x7f35e9)
+            self.draw.rectangle((186, 110, 186 + (disk_parameters.disk0.used_percentage * 87 / 100), 113), fill=0x7f35e9)
 
         if (disk_parameters.disk1.capacity == 0):
             self.draw.rectangle((186, 131, 273, 134), fill=0x000000)
         else:
-            self.draw.rectangle((186, 131, 186 + (disk_parameters.disk1.usage * 87 / 100), 134), fill=0x7f35e9)
+            self.draw.rectangle((186, 131, 186 + (disk_parameters.disk1.used_percentage * 87 / 100), 134), fill=0x7f35e9)
 
         if disk_parameters.raid:
             self.draw.text((160, 78), 'RAID', fill=0xC1C0BE, font=Font1)
