@@ -1,19 +1,11 @@
-"""
-Select images as required
-True for image1
-False for image2
-"""
+import logging
 import time
 
 from display import Display
 
-Select = True
 
-display = Display()
+if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s | %(levelname)s | %(name)s | %(message)s', level=logging.DEBUG)
 
-while 1:
-    if display.flgh:
-        display.HMI1()
-    else:
-        display.HMI2()
-    time.sleep(0.5)
+    display = Display()
+    display.render()

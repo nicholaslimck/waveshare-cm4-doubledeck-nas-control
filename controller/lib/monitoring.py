@@ -1,10 +1,12 @@
 import json
 import logging
 import os
+import psutil
 import re
 import socket
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from psutil._common import sdiskusage
 
 
 @dataclass
@@ -22,8 +24,6 @@ class Disk:
 
             total_capacity += capacity
             total_usage += usage
-        
-        logging.debug(f"{self.id}: {self.usage}/{self.capacity}")
 
         self.capacity = total_capacity
         self.usage = total_usage
@@ -38,46 +38,62 @@ class StorageParameters:
     update_interval: int = 1
 
     def update(self):
-        while True:
-            blockdevices = json.loads(os.popen('lsblk  -f -b --json').read())['blockdevices']
+        blockdevices = json.loads(os.popen('lsblk  -f -b --json').read())['blockdevices']
 
-            # Check for RAID volumes
-            if any(['raid' in device['fstype'] for device in blockdevices
-                    if device['name'] in [self.disk0.id, self.disk1.id]]):
-                self.raid = True
+        # Check for RAID volumes
+        if any(['raid' in device['fstype'] for device in blockdevices
+                if device['name'] in [self.disk0.id, self.disk1.id]]):
+            self.raid = True
 
-            # Calculate capacity and usage of each disk
-            for device in blockdevices:
-                for disk in [self.disk0, self.disk1]:
-                    if device['name'] == disk.id:
-                        disk.calculate_capacity_and_usage(children=device['children'])
-
-            time.sleep(self.update_interval)
+        # Calculate capacity and usage of each disk
+        for device in blockdevices:
+            for disk in [self.disk0, self.disk1]:
+                if device['name'] == disk.id:
+                    disk.calculate_capacity_and_usage(children=device['children'])
 
 
 @dataclass
-class ReadParameters:
-    Get_back = [0, 0, 0, 0, 0]  # 返回Disk的内存
-    disk_parameters = StorageParameters()
+class SystemParameters:
+    disk_parameters: StorageParameters = StorageParameters()
+    ip_address: str = '127.0.0.1'
+    temperature: float = 0.0
+    rx_speed: float = 0.0
+    tx_speed: float = 0.0
+    cpu_usage: float = 0.0
+    memory_usage: float = 0.0
+    disk_usage: sdiskusage = sdiskusage(total=0, used=0, free=0, percent=0)
+
+    update_interval: int = 1
+
     flag = 0  # 未挂载还是未分区
 
-    @staticmethod
-    def get_ip_address():
-        # 会存在异常  卡死   谨慎获取
+    def update(self):
+        while True:
+            self.disk_parameters.update()
+            self.get_ip_address()
+            self.get_temperature()
+            self.get_rx_speed()
+            self.get_tx_speed()
+            self.get_cpu_usage()
+            self.get_memory_usage()
+            self.get_disk_usage()
+
+            logging.debug(self)
+
+            time.sleep(self.update_interval)
+
+    def get_ip_address(self):
         # There will be exceptions, get stuck, get it carefully
         # Threading is better
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect_ex(('8.8.8.8', 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        self.ip_address = ip
 
-    @staticmethod
-    def get_temperature():
-        with open('/sys/class/thermal/thermal_zone0/temp', 'rt') as f:
-            temp = int(f.read()) / 1000.0
-        # print(temp)
-        return temp
+    def get_temperature(self):
+        temp = float(os.popen('vcgencmd measure_temp').read().strip().split('=')[1].strip("'C"))
+        self.temperature = temp
 
     @staticmethod
     def get_network_speed(interface, is_download):
@@ -100,7 +116,7 @@ class ReadParameters:
         begin = int(self.get_network_speed(interface, is_upload))
         time.sleep(get_time)
         end = int(self.get_network_speed(interface, is_upload))
-        return (end - begin) / get_time / 1024
+        self.rx_speed = (end - begin) / get_time / 1024
 
     def get_tx_speed(self):
         interface = 'eth0'
@@ -110,5 +126,13 @@ class ReadParameters:
         begin = int(self.get_network_speed(interface, is_upload))
         time.sleep(get_time)
         end = int(self.get_network_speed(interface, is_upload))
+        self.tx_speed = (end - begin) / get_time / 1024
 
-        return (end - begin) / get_time / 1024
+    def get_cpu_usage(self):
+        self.cpu_usage = psutil.cpu_percent()
+
+    def get_memory_usage(self):
+        self.memory_usage = psutil.virtual_memory().percent
+    
+    def get_disk_usage(self):
+        self.disk_usage = psutil.disk_usage('/')
