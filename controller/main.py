@@ -4,6 +4,7 @@ True for image1
 False for image2
 """
 import time
+
 from display import Display
 
 Select = True

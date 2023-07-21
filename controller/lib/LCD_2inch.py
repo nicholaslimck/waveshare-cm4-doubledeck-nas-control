@@ -1,5 +1,5 @@
 import time
-from lcdconfig import RaspberryPi
+from .lcdconfig import RaspberryPi
 
 
 class LCD_2inch(RaspberryPi):
