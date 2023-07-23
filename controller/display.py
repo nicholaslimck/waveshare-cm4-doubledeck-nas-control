@@ -97,9 +97,9 @@ class Display:
                             self.system_pararmeters.disk_parameters.disk1.temperature]
             max_temp = max(temperatures)
             if max_temp < 45:
-                self.disp._pwm1.ChangeDutyCycle(20)
-            elif max_temp < 50:
                 self.disp._pwm1.ChangeDutyCycle(30)
+            elif max_temp < 50:
+                self.disp._pwm1.ChangeDutyCycle(35)
             elif max_temp < 55:
                 self.disp._pwm1.ChangeDutyCycle(40)
             elif max_temp < 60:
