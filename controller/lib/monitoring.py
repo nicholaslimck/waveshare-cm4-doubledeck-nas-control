@@ -16,16 +16,32 @@ class Disk:
     available: int = 0
     used: int = 0
     used_percentage: float = 0.0
+    temperature: int = 0
 
+    children: list = field(default_factory=list)
 
-    def calculate_capacity_and_usage(self, children):
+    def update(self):
+        self.calculate_capacity_and_usage()
+        self.update_temperature()
+
+    def calculate_capacity_and_usage(self):
         try:
-            self.capacity = sum([int(child['fssize']) for child in children])
-            self.available = sum([int(child['fsavail']) for child in children])
-            self.used = sum([int(child['fsused']) for child in children])
+            self.capacity = sum([int(child['fssize']) for child in self.children])
+            self.available = sum([int(child['fsavail']) for child in self.children])
+            self.used = sum([int(child['fsused']) for child in self.children])
             self.used_percentage = 100*self.used/self.capacity
         except TypeError:
             pass
+    
+    def update_temperature(self):
+        smart_data = self.get_smart_data()
+        self.temperature = smart_data.get('temperature').get('current')
+
+    
+    def get_smart_data(self):
+        smart_data = json.loads(os.popen(f'smartctl -A /dev/{self.id} --json').read())
+        return smart_data
+
 
 
 @dataclass
@@ -51,17 +67,18 @@ class StorageParameters:
                 for disk in [self.disk0, self.disk1]:
                     if device['name'] == disk.id:
                         if device.get('children'):
-                            disk.calculate_capacity_and_usage(children=device['children'])
+                            disk.children = device['children']
+                            disk.update()
 
 
 @dataclass
 class SystemParameters:
     disk_parameters: StorageParameters = StorageParameters()
     ip_address: str = '127.0.0.1'
-    temperature: float = 0.0
+    cpu_usage: float = 0.0
+    cpu_temperature: float = 0.0
     rx_speed: float = 0.0
     tx_speed: float = 0.0
-    cpu_usage: float = 0.0
     memory_usage: float = 0.0
     disk_usage: sdiskusage = sdiskusage(total=0, used=0, free=0, percent=0)
 
@@ -74,10 +91,10 @@ class SystemParameters:
             try:
                 self.disk_parameters.update()
                 self.get_ip_address()
+                self.get_cpu_usage()
                 self.get_temperature()
                 self.get_rx_speed()
                 self.get_tx_speed()
-                self.get_cpu_usage()
                 self.get_memory_usage()
                 self.get_disk_usage()
 
@@ -97,8 +114,8 @@ class SystemParameters:
         self.ip_address = ip
 
     def get_temperature(self):
-        temp = float(os.popen('vcgencmd measure_temp').read().strip().split('=')[1].strip("'C"))
-        self.temperature = temp
+        temp = float(os.popen('cat /sys/class/thermal/thermal_zone0/temp').read())/1000
+        self.cpu_temperature = temp
 
     @staticmethod
     def get_network_speed(interface, is_download):
