@@ -138,7 +138,7 @@ class SystemParameters:
         begin = int(self.get_network_speed(interface, is_upload))
         time.sleep(get_time)
         end = int(self.get_network_speed(interface, is_upload))
-        self.rx_speed = (end - begin) / get_time / 1024
+        self.rx_speed = (end - begin) / get_time
 
     def get_tx_speed(self):
         interface = 'eth0'
@@ -148,7 +148,7 @@ class SystemParameters:
         begin = int(self.get_network_speed(interface, is_upload))
         time.sleep(get_time)
         end = int(self.get_network_speed(interface, is_upload))
-        self.tx_speed = (end - begin) / get_time / 1024
+        self.tx_speed = (end - begin) / get_time
 
     def get_cpu_usage(self):
         self.cpu_usage = psutil.cpu_percent()

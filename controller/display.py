@@ -214,7 +214,7 @@ class Display:
         draw.arc((253, 80, 313, 142), -90, -90 + (temp_t * 360 / 100), fill=0x0088ff, width=8)
 
         # Network speed
-        TX = self.system_pararmeters.tx_speed * 1024
+        TX = self.system_pararmeters.tx_speed
 
         if TX < 1024:  # B
             draw.text((250, 190), str(math.floor(TX)) + 'B/s', fill=0x00ff00, font=font02_18, )
@@ -223,7 +223,7 @@ class Display:
         else:  # M
             draw.text((250, 190), str(math.floor(TX / 1024 / 1024)) + 'MB/s', fill=0x008fff, font=font02_18, )
 
-        RX = self.system_pararmeters.rx_speed * 1024
+        RX = self.system_pararmeters.rx_speed
 
         if RX < 1024:  # B
             draw.text((183, 190), str(math.floor(RX)) + 'B/s', fill=0x00ff00, font=font02_18, )
@@ -320,7 +320,7 @@ class Display:
         draw.text((170, 205), str(math.floor(temp_t)) + '℃', fill=0x0088ff, font=font02_15)
 
         # Network speed
-        TX = self.system_pararmeters.tx_speed * 1024
+        TX = self.system_pararmeters.tx_speed
 
         if (TX < 1024):  # B
             draw.text((210, 154), str(math.floor(TX)) + 'B/s', fill=0x00ff00, font=font02_15, )
@@ -329,7 +329,7 @@ class Display:
         else:  # M
             draw.text((210, 154), str(math.floor(TX / 1024 / 1024)) + 'MB/s', fill=0x008fff, font=font02_15, )
 
-        RX = self.system_pararmeters.rx_speed * 1024
+        RX = self.system_pararmeters.rx_speed
 
         if (RX < 1024):  # B
             draw.text((210, 174), str(math.floor(RX)) + 'B/s', fill=0x00ff00, font=font02_15, )
