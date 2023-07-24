@@ -30,6 +30,9 @@ class Display:
     mode = 1 # Default display mode
     refresh_interval = 0.2
 
+    hmi1_base = None
+    hmi2_base = None
+
     def __init__(self):
         # display with hardware SPI:
         # Warning: Don't create multiple display objects!
@@ -55,7 +58,9 @@ class Display:
 
         # Create blank image for drawing.
         blank_canvas = Image.new("RGB", (self.disp.height, self.disp.width), "WHITE")
-        draw = ImageDraw.Draw(blank_canvas)
+        ImageDraw.Draw(blank_canvas)
+        self.init_HMI1_base()
+        self.init_HMI2_base()
 
         t1.start()
         t2.start()
@@ -117,6 +122,46 @@ class Display:
             
             time.sleep(1)
         
+    def init_HMI1_base(self):
+        image = Image.open('pic/BL.jpg')
+
+        draw = ImageDraw.Draw(image)
+        title_font = ImageFont.truetype("./Font/Font02.ttf", 28)
+        draw.text((90, 2), 'Device Status', fill=0xf7ba47, font=title_font)
+
+        draw.text((30, 141), 'CPU', fill=0xf7ba47, font=font02_15)
+        draw.text((107, 141), 'Disk', fill=0xf7ba47, font=font02_15)
+        draw.text((190, 141), 'RAM', fill=0xf7ba47, font=font02_15)
+        draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=font02_15)
+
+        draw.text((205, 170), 'R X', fill=0xffffff, font=font02_10, stroke_width=1)
+        draw.text((270, 170), 'T X', fill=0xffffff, font=font02_10, stroke_width=1)
+
+        draw.arc((10, 80, 70, 142), 0, 360, fill=0xffffff, width=8)
+        draw.arc((90, 80, 150, 142), 0, 360, fill=0xffffff, width=8)
+        draw.arc((173, 80, 233, 142), 0, 360, fill=0xffffff, width=8)
+        draw.arc((253, 80, 313, 142), 0, 360, fill=0xffffff, width=8)
+
+        self.hmi1_base = image
+    
+    def init_HMI2_base(self):
+        image = Image.open('pic/Disk.jpg')
+
+        draw = ImageDraw.Draw(image)
+        draw.text((60, 55), 'CPU Used', fill=0xC1C0BE, font=font02_20)
+
+        draw.text((45, 140), 'Used', fill=0xC1C0BE, font=font02_13)
+        draw.text((45, 163), 'Free', fill=0xC1C0BE, font=font02_13)
+
+        draw.text((185, 93), 'Disk0:', fill=0xC1C0BE, font=font02_14)
+        draw.text((185, 114), 'Disk1:', fill=0xC1C0BE, font=font02_14)
+
+        draw.text((188, 155), 'TX:', fill=0xC1C0BE, font=font02_14)
+        draw.text((188, 175), 'RX:', fill=0xC1C0BE, font=font02_14)
+
+        draw.text((133, 205), 'TEMP:', fill=0x0088ff, font=font02_15)
+
+        self.hmi2_base = image
 
     def HMI1(self):
         """
@@ -127,21 +172,8 @@ class Display:
         - Storage Drive Usage
         - Upload/Download Speed
         """
-        image = Image.open('pic/BL.jpg')
-
+        image = self.hmi1_base.copy()
         draw = ImageDraw.Draw(image)
-        title_font = ImageFont.truetype("./Font/Font02.ttf", 28)
-        draw.text((90, 2), 'Device Status', fill=0xf7ba47, font=title_font)
-
-        stats_font = ImageFont.truetype("./Font/Font02.ttf", 15)
-        draw.text((30, 141), 'CPU', fill=0xf7ba47, font=font02_15)
-        draw.text((107, 141), 'Disk', fill=0xf7ba47, font=font02_15)
-        draw.text((190, 141), 'RAM', fill=0xf7ba47, font=font02_15)
-        draw.text((267, 141), 'TEMP', fill=0xf7ba47, font=font02_15)
-
-        network_font = ImageFont.truetype("./Font/Font02.ttf", 10)
-        draw.text((205, 170), 'R X', fill=0xffffff, font=network_font, stroke_width=1)
-        draw.text((270, 170), 'T X', fill=0xffffff, font=network_font, stroke_width=1)
 
         # TIME
         time_t = time.strftime("%Y-%m-%d   %H:%M:%S", time.localtime())
@@ -161,7 +193,6 @@ class Display:
         else:
             draw.text((34, 100), str(math.floor(CPU_usage)) + '%', fill=0xf1b400, font=font02_15, )
 
-        draw.arc((10, 80, 70, 142), 0, 360, fill=0xffffff, width=8)
         draw.arc((10, 80, 70, 142), -90, -90 + (CPU_usage * 360 / 100), fill=0x60ad4c, width=8)
 
         # System disk usage
@@ -173,7 +204,6 @@ class Display:
         else:
             draw.text((114, 100), str(math.floor(disk_usage.percent)) + '%', fill=0xf1b400, font=font02_15, )
 
-        draw.arc((90, 80, 150, 142), 0, 360, fill=0xffffff, width=8)
         draw.arc((90, 80, 150, 142), -90, -90 + (disk_usage.percent * 360 / 100), fill=0x7f35e9, width=8)
 
         # System Temperature
@@ -181,7 +211,6 @@ class Display:
 
         draw.text((268, 100), str(math.floor(temp_t)) + '℃', fill=0x0088ff, font=font02_18)
 
-        draw.arc((253, 80, 313, 142), 0, 360, fill=0xffffff, width=8)
         draw.arc((253, 80, 313, 142), -90, -90 + (temp_t * 360 / 100), fill=0x0088ff, width=8)
 
         # Network speed
@@ -212,11 +241,13 @@ class Display:
             draw.text((189, 100), str(math.floor(memory_usage)) + '%', fill=0xf1b400, font=font02_18, )
         else:
             draw.text((195, 100), str(math.floor(memory_usage)) + '%', fill=0xf1b400, font=font02_18, )
-        draw.arc((173, 80, 233, 142), 0, 360, fill=0xffffff, width=8)
+        
         draw.arc((173, 80, 233, 142), -90, -90 + (memory_usage * 360 / 100), fill=0xf1b400, width=8)
 
         # Disk Usage
         disk_parameters = self.system_pararmeters.disk_parameters
+
+        # Disk 0 Usage
         if disk_parameters.disk0.capacity == 0:
             draw.rectangle((40, 177, 142, 190))
             draw.rectangle((41, 178, 141, 189), fill=0x000000)
@@ -224,7 +255,7 @@ class Display:
             draw.rectangle((40, 177, 142, 190))
             draw.rectangle((41, 178, 41 + disk_parameters.disk0.used_percentage, 189), fill=0x7f35e9)
             draw.text((80, 176), str(math.floor(disk_parameters.disk0.used_percentage)) + '%', fill=0xf1b400, font=font02_13, )
-
+        # Disk 1 Usage
         if disk_parameters.disk1.capacity == 0:
             draw.rectangle((40, 197, 142, 210))
             draw.rectangle((41, 198, 141, 209), fill=0x000000)
@@ -232,6 +263,7 @@ class Display:
             draw.rectangle((40, 197, 142, 210))
             draw.rectangle((41, 198, 41 + disk_parameters.disk1.used_percentage, 209), fill=0x7f35e9)
             draw.text((80, 196), str(math.floor(disk_parameters.disk1.used_percentage)) + '%', fill=0xf1b400, font=font02_13, )
+        # RAID Check
         if disk_parameters.raid:
             draw.text((40, 161), 'RAID', fill=0xf7ba47, font=font02_15)
 
@@ -251,21 +283,8 @@ class Display:
         """
         Second HMI screen, focusing on available storage
         """
-        image = Image.open('pic/Disk.jpg')
-
+        image = self.hmi2_base.copy()
         draw = ImageDraw.Draw(image)
-        draw.text((60, 55), 'CPU Used', fill=0xC1C0BE, font=font02_20)
-
-        draw.text((45, 140), 'Used', fill=0xC1C0BE, font=font02_13)
-        draw.text((45, 163), 'Free', fill=0xC1C0BE, font=font02_13)
-
-        draw.text((185, 93), 'Disk0:', fill=0xC1C0BE, font=font02_14)
-        draw.text((185, 114), 'Disk1:', fill=0xC1C0BE, font=font02_14)
-
-        draw.text((188, 155), 'TX:', fill=0xC1C0BE, font=font02_14)
-        draw.text((188, 175), 'RX:', fill=0xC1C0BE, font=font02_14)
-
-        draw.text((133, 205), 'TEMP:', fill=0x0088ff, font=font02_15)
 
         # Time
         time_t = time.strftime("%Y-%m-%d   %H:%M:%S", time.localtime())
@@ -319,22 +338,22 @@ class Display:
         else:  # M
             draw.text((210, 174), str(math.floor(RX / 1024 / 1024)) + 'MB/s', fill=0x008fff, font=font02_15, )
 
-        # Disk 使用情况
+        # Disk Usage
         disk_parameters = self.system_pararmeters.disk_parameters
 
+        # Disk 0
         draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0.available), fill=0xC1C0BE, font=font02_15)
-        draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=0xC1C0BE, font=font02_15)
-
         if (disk_parameters.disk0.capacity == 0):
             draw.rectangle((186, 110, 273, 113), fill=0x000000)
         else:
             draw.rectangle((186, 110, 186 + (disk_parameters.disk0.used_percentage * 87 / 100), 113), fill=0x7f35e9)
-
+        # Disk 1
+        draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=0xC1C0BE, font=font02_15)
         if (disk_parameters.disk1.capacity == 0):
             draw.rectangle((186, 131, 273, 134), fill=0x000000)
         else:
             draw.rectangle((186, 131, 186 + (disk_parameters.disk1.used_percentage * 87 / 100), 134), fill=0x7f35e9)
-
+        # RAID Check
         if disk_parameters.raid:
             draw.text((160, 78), 'RAID', fill=0xC1C0BE, font=font02_15)
 
