@@ -27,7 +27,8 @@ font02_20 = ImageFont.truetype("./Font/Font02.ttf", 20)
 
 
 class Display:
-    mode = 1 # Default display mode
+    display_mode = 1 # Default display mode
+    fan_mode = "default"
     refresh_interval = 0.2
 
     hmi1_base = None
@@ -69,27 +70,37 @@ class Display:
     def key(self):
         """
         Change HMI display mode when the USER key is held for 0.5 seconds
+        Change fan mode when the USER key is held for 2 seconds
         """
         counter = 0
         while True:
-            if (GPIO.input(20) == 0):
+            if GPIO.input(20) == 0:
                 counter = counter + 1
             else:
-                if (counter > 5):
-                    logging.debug('Changing HMI display mode')
-                    if self.mode == 1:
-                        self.mode = 2
+                if counter > 20:
+                    if self.fan_mode == "default":
+                        logging.info('Fan mode: silent')
+                        self.fan_mode = "silent"
                     else:
-                        self.mode = 1
+                        logging.info('Fan mode: default')
+                        self.fan_mode = "default"
+                elif counter > 5:
+                    if self.display_mode == 1:
+                        logging.info('HMI display mode: 2')
+                        self.display_mode = 2
+                    else:
+                        logging.info('HMI display mode: 1')
+                        self.display_mode = 1
+
                 counter = 0
             time.sleep(0.1)
 
     def render(self):
         while True:
             try:
-                if self.mode == 1:
+                if self.display_mode == 1:
                     self.HMI1()
-                elif self.mode == 2:
+                elif self.display_mode == 2:
                     self.HMI2()
                 time.sleep(self.refresh_interval)
             
@@ -100,27 +111,44 @@ class Display:
                 logging.info("quit:")
                 exit()
     
+    def set_fan_speed(self, speed):
+        min_duty_cycle = 35
+        if speed:
+            duty_cycle = math.floor(speed*((100-min_duty_cycle)/100) + min_duty_cycle)
+        else:
+            duty_cycle = 0
+        
+        self.disp._pwm1.ChangeDutyCycle(duty_cycle)
+
     def control_fan(self):
         """
         Control the PWM fan depending on the CPU and disk temperatures
+
+        Default mode: Scale fan speed linearly (0-100%) between 50 and 85 degrees Celsius
+        Silent mode: Scale fan speed is linearly (0-50%) between 65 and 85 degrees Celsius
         """
         while True:
             temperatures = [self.system_pararmeters.cpu_temperature,
                             self.system_pararmeters.disk_parameters.disk0.temperature, 
                             self.system_pararmeters.disk_parameters.disk1.temperature]
-            max_temp = max(temperatures)
-            if max_temp < 45:
-                self.disp._pwm1.ChangeDutyCycle(30)
-            elif max_temp < 50:
-                self.disp._pwm1.ChangeDutyCycle(35)
-            elif max_temp < 55:
-                self.disp._pwm1.ChangeDutyCycle(40)
-            elif max_temp < 60:
-                self.disp._pwm1.ChangeDutyCycle(45)
-            else:
-                self.disp._pwm1.ChangeDutyCycle(50)
+            ref_temp = max(temperatures)
+            fan_speed = 0
+            if self.fan_mode == "default":
+                base_temp = 50
+                critical_temp = 85
+                max_speed = 100
+
+            elif self.fan_mode == "silent":
+                base_temp = 65
+                critical_temp = 85
+                max_speed = 50
+
+            if ref_temp >= base_temp:
+                fan_speed = math.floor(max_speed*(ref_temp-base_temp)/(critical_temp-base_temp))
+
+            self.set_fan_speed(fan_speed)
             
-            time.sleep(1)
+            time.sleep(5)
         
     def init_HMI1_base(self):
         image = Image.open('pic/BL.jpg')
