@@ -1,11 +1,11 @@
 import json
 import logging
 import os
-import psutil
-import re
 import socket
 import time
 from dataclasses import dataclass, field
+
+import psutil
 from psutil._common import sdiskusage
 
 
@@ -29,31 +29,30 @@ class Disk:
             self.capacity = sum([int(child['fssize']) for child in self.children])
             self.available = sum([int(child['fsavail']) for child in self.children])
             self.used = sum([int(child['fsused']) for child in self.children])
-            self.used_percentage = 100*self.used/self.capacity
+            self.used_percentage = 100 * self.used / self.capacity
         except TypeError:
             pass
-    
+
     def update_temperature(self):
         smart_data = self.get_smart_data()
         self.temperature = smart_data.get('temperature').get('current')
 
-    
     def get_smart_data(self):
         smart_data = json.loads(os.popen(f'smartctl -A /dev/{self.id} --json').read())
         return smart_data
 
 
-
 @dataclass
 class StorageParameters:
-    disk0: Disk = Disk('sda')
-    disk1: Disk = Disk('sdb')
+    disk0: Disk
+    disk1: Disk
     raid: bool = False
 
     update_interval: int = 1
 
     def update(self):
-        blockdevices = json.loads(os.popen('lsblk -b -o NAME,FSTYPE,FSSIZE,FSAVAIL,FSUSED --json').read())['blockdevices']
+        blockdevices = json.loads(os.popen('lsblk -b -o NAME,FSTYPE,FSSIZE,FSAVAIL,FSUSED --json').read())[
+            'blockdevices']
 
         # Only process if blockdevices is populated
         if blockdevices and len(blockdevices):
@@ -73,7 +72,7 @@ class StorageParameters:
 
 @dataclass
 class SystemParameters:
-    disk_parameters: StorageParameters = StorageParameters()
+    disk_parameters: StorageParameters = StorageParameters(Disk('sda'), Disk('sdb'))
     ip_address: str = '127.0.0.1'
     cpu_usage: float = 0.0
     cpu_temperature: float = 0.0
@@ -114,7 +113,7 @@ class SystemParameters:
         self.ip_address = ip
 
     def get_temperature(self):
-        temp = float(os.popen('cat /sys/class/thermal/thermal_zone0/temp').read())/1000
+        temp = float(os.popen('cat /sys/class/thermal/thermal_zone0/temp').read()) / 1000
         self.cpu_temperature = temp
 
     @staticmethod
@@ -155,6 +154,6 @@ class SystemParameters:
 
     def get_memory_usage(self):
         self.memory_usage = psutil.virtual_memory().percent
-    
+
     def get_disk_usage(self):
         self.disk_usage = psutil.disk_usage('/')
