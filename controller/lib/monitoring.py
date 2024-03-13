@@ -72,18 +72,24 @@ class StorageParameters:
 
 @dataclass
 class SystemParameters:
-    disk_parameters: StorageParameters = StorageParameters(Disk('sda'), Disk('sdb'))
+    disk_parameters: StorageParameters = None
     ip_address: str = '127.0.0.1'
     cpu_usage: float = 0.0
     cpu_temperature: float = 0.0
     rx_speed: float = 0.0
     tx_speed: float = 0.0
     memory_usage: float = 0.0
-    disk_usage: sdiskusage = sdiskusage(total=0, used=0, free=0, percent=0)
+    disk_usage: sdiskusage = None
 
     update_interval: int = 1
 
     flag = 0  # 未挂载还是未分区
+
+    def __post_init__(self):
+        if not self.disk_parameters:
+            self.disk_parameters = StorageParameters(Disk('sda'), Disk('sdb'))
+        if not self.disk_usage:
+            self.disk_usage = sdiskusage(total=0, used=0, free=0, percent=0)
 
     def update(self):
         while True:
