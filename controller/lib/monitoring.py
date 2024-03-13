@@ -81,6 +81,7 @@ class SystemParameters:
     memory_usage: float = 0.0
     disk_usage: sdiskusage = None
 
+    network_interface: str = 'end0'
     update_interval: int = 1
 
     flag = 0  # 未挂载还是未分区
@@ -136,23 +137,21 @@ class SystemParameters:
                 return line.rstrip().split(':')[1].split()[which_num]
 
     def get_rx_speed(self):
-        interface = 'eth0'
         is_upload = True  # False
         get_time = 0.1
         # Computation part 计算部分
-        begin = int(self.get_network_speed(interface, is_upload))
+        begin = int(self.get_network_speed(self.network_interface, is_upload))
         time.sleep(get_time)
-        end = int(self.get_network_speed(interface, is_upload))
+        end = int(self.get_network_speed(self.network_interface, is_upload))
         self.rx_speed = (end - begin) / get_time
 
     def get_tx_speed(self):
-        interface = 'eth0'
         is_upload = False
         get_time = 0.1
         # Computation part 计算部分
-        begin = int(self.get_network_speed(interface, is_upload))
+        begin = int(self.get_network_speed(self.network_interface, is_upload))
         time.sleep(get_time)
-        end = int(self.get_network_speed(interface, is_upload))
+        end = int(self.get_network_speed(self.network_interface, is_upload))
         self.tx_speed = (end - begin) / get_time
 
     def get_cpu_usage(self):
