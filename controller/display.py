@@ -180,6 +180,7 @@ class RenderCache:
     disk1_percent: float = -1.0
     ip_address: str = ""
     display_mode: Optional['DisplayMode'] = None
+    fan_mode: Optional['FanMode'] = None
     last_minute: int = -1  # For time display (only update on minute change)
 
     def has_significant_change(
@@ -194,11 +195,16 @@ class RenderCache:
         disk1_percent: float,
         ip_address: str,
         display_mode: 'DisplayMode',
+        fan_mode: 'FanMode',
         current_minute: int
     ) -> bool:
         """Check if any value has changed significantly enough to warrant a re-render."""
         # Always render on mode change
         if display_mode != self.display_mode:
+            return True
+
+        # Always render on fan mode change
+        if fan_mode != self.fan_mode:
             return True
 
         # Always render on minute change (for time display)
@@ -250,6 +256,7 @@ class RenderCache:
         disk1_percent: float,
         ip_address: str,
         display_mode: 'DisplayMode',
+        fan_mode: 'FanMode',
         current_minute: int
     ) -> None:
         """Update the cache with current values."""
@@ -263,6 +270,7 @@ class RenderCache:
         self.disk1_percent = disk1_percent
         self.ip_address = ip_address
         self.display_mode = display_mode
+        self.fan_mode = fan_mode
         self.last_minute = current_minute
 
 
@@ -429,6 +437,7 @@ class Display:
                     disk1_percent=disk1_pct,
                     ip_address=self.system_parameters.ip_address,
                     display_mode=self.display_mode,
+                    fan_mode=self.fan_mode,
                     current_minute=current_minute
                 )
 
@@ -447,6 +456,7 @@ class Display:
                         disk1_percent=disk1_pct,
                         ip_address=self.system_parameters.ip_address,
                         display_mode=self.display_mode,
+                        fan_mode=self.fan_mode,
                         current_minute=current_minute
                     )
 
@@ -654,6 +664,10 @@ class Display:
         if self._has_error:
             draw.ellipse((300, 35, 315, 50), fill=0xff0000)
 
+        # Turbo mode indicator
+        if self.fan_mode == FanMode.TURBO:
+            draw.text((255, 35), 'TURBO', fill=COLOR_CYAN, font=font02_13)
+
         image = image.rotate(180)
         self.disp.ShowImage(image)
 
@@ -739,6 +753,10 @@ class Display:
         # Error indicator
         if self._has_error:
             draw.ellipse((300, 5, 315, 20), fill=0xff0000)
+
+        # Turbo mode indicator
+        if self.fan_mode == FanMode.TURBO:
+            draw.text((255, 5), 'TURBO', fill=COLOR_CYAN, font=font02_13)
 
         image = image.rotate(180)
         self.disp.ShowImage(image)
