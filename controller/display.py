@@ -55,11 +55,29 @@ FAN_MIN_DUTY_CYCLE = 35  # Minimum duty cycle to prevent motor stall
 FAN_CONTROL_INTERVAL = 5  # seconds
 FAN_HYSTERESIS = 3  # Temperature change threshold to trigger fan speed adjustment
 
-# Fan mode parameters: (base_temp, critical_temp, max_speed)
-FAN_MODE_PARAMS = {
-    FanMode.DEFAULT: (65, 85, 50),
-    FanMode.TURBO: (50, 85, 100),
+# Fan curve zones: list of (temp_threshold, fan_speed_percent)
+# Fan speed is interpolated between zones for smooth transitions
+FAN_CURVE_DEFAULT = [
+    (55, 0),    # < 55°C: fan off
+    (65, 25),   # 55-65°C: idle cooling
+    (75, 40),   # 65-75°C: light load
+    (85, 50),   # 75-85°C: max for DEFAULT
+]
+
+FAN_CURVE_TURBO = [
+    (45, 0),    # < 45°C: fan off
+    (55, 30),   # 45-55°C: idle cooling
+    (65, 50),   # 55-65°C: moderate load
+    (75, 75),   # 65-75°C: heavy load
+    (85, 100),  # 75-85°C: max cooling
+]
+
+FAN_CURVES = {
+    FanMode.DEFAULT: FAN_CURVE_DEFAULT,
+    FanMode.TURBO: FAN_CURVE_TURBO,
 }
+
+MAX_SPEED_CHANGE = 10  # Max speed change per update cycle for smooth ramping
 
 # Display brightness (0-100)
 BRIGHTNESS_DEFAULT = 100
@@ -224,6 +242,55 @@ def draw_centered_percentage(
     draw.text((center_x + offset, y), text, fill=color, font=font)
 
 
+def get_fan_speed_for_temp(temp: float, curve: list) -> int:
+    """
+    Get fan speed from temperature using stepped curve with interpolation.
+
+    Args:
+        temp: Current temperature in Celsius.
+        curve: List of (temp_threshold, fan_speed_percent) tuples.
+
+    Returns:
+        Fan speed percentage (0-100).
+    """
+    for i, (threshold, speed) in enumerate(curve):
+        if temp < threshold:
+            if i == 0:
+                return 0
+            # Interpolate between previous and current zone
+            prev_threshold, prev_speed = curve[i - 1]
+            ratio = (temp - prev_threshold) / (threshold - prev_threshold)
+            return int(prev_speed + ratio * (speed - prev_speed))
+    # Above highest threshold - return max speed
+    return curve[-1][1]
+
+
+def get_weighted_temp(cpu: float, disk0: float, disk1: float) -> float:
+    """
+    Calculate weighted reference temperature, filtering invalid sensors.
+
+    CPU is weighted higher (60%) since it responds faster to load changes.
+    Disk temps (20% each) are included only if valid (> 0).
+
+    Args:
+        cpu: CPU temperature in Celsius.
+        disk0: Disk 0 temperature (0 if unavailable).
+        disk1: Disk 1 temperature (0 if unavailable).
+
+    Returns:
+        Weighted average temperature.
+    """
+    temps = [(cpu, 0.6)]
+    if disk0 > 0:
+        temps.append((disk0, 0.2))
+    if disk1 > 0:
+        temps.append((disk1, 0.2))
+
+    # Normalize weights if sensors are missing
+    total_weight = sum(w for _, w in temps)
+    return sum(t * w / total_weight for t, w in temps)
+
+
 def has_disk_warning(disk0_capacity: int, disk1_capacity: int) -> bool:
     """
     Check if there's a disk warning condition (at least one disk missing).
@@ -360,6 +427,7 @@ class Display:
         self.display_mode: DisplayMode = DisplayMode.DEVICE_STATUS
         self.fan_mode: FanMode = FanMode.DEFAULT
         self._last_fan_temp: float = 0.0  # For hysteresis
+        self._current_fan_speed: int = 0  # Current speed for ramp limiting
         self._last_activity_time: float = time.time()  # For auto-dim
         self._brightness: int = BRIGHTNESS_DEFAULT
         self._has_error: bool = False  # Error state indicator
@@ -577,38 +645,39 @@ class Display:
         """
         Control the PWM fan based on CPU and disk temperatures.
 
-        Uses temperature-based fan curves with hysteresis to prevent
-        rapid oscillation near threshold temperatures.
+        Uses stepped fan curves with interpolation for smooth, quiet operation.
+        CPU temperature is weighted higher (60%) since it responds faster to load.
+        Includes ramp limiting to prevent jarring speed changes.
 
         Fan modes:
-            - DEFAULT: 0-50% speed, 65-85°C range
-            - TURBO: 0-100% speed, 50-85°C range
+            - DEFAULT: Quieter operation, max 50% speed
+            - TURBO: Aggressive cooling, max 100% speed
         """
         while True:
             try:
-                temperatures = [
-                    self.system_parameters.cpu_temperature,
-                    self.system_parameters.disk_parameters.disk0.temperature,
-                    self.system_parameters.disk_parameters.disk1.temperature
-                ]
-                ref_temp = max(temperatures)
+                cpu_temp = self.system_parameters.cpu_temperature
+                disk_params = self.system_parameters.disk_parameters
+                disk0_temp = disk_params.disk0.temperature if disk_params else 0
+                disk1_temp = disk_params.disk1.temperature if disk_params else 0
+
+                # Calculate weighted reference temperature
+                ref_temp = get_weighted_temp(cpu_temp, disk0_temp, disk1_temp)
 
                 # Apply hysteresis: only adjust if temperature changed significantly
                 if abs(ref_temp - self._last_fan_temp) >= FAN_HYSTERESIS:
                     self._last_fan_temp = ref_temp
 
-                    # Get fan parameters for current mode
-                    base_temp, critical_temp, max_speed = FAN_MODE_PARAMS[self.fan_mode]
+                    # Get target speed from stepped curve
+                    curve = FAN_CURVES[self.fan_mode]
+                    target_speed = get_fan_speed_for_temp(ref_temp, curve)
 
-                    # Calculate fan speed
-                    fan_speed = 0
-                    if ref_temp >= base_temp:
-                        fan_speed = math.floor(
-                            max_speed * (ref_temp - base_temp) / (critical_temp - base_temp)
-                        )
-                        fan_speed = min(fan_speed, max_speed)  # Clamp to max
+                    # Apply ramp limiting for smooth transitions
+                    delta = target_speed - self._current_fan_speed
+                    if abs(delta) > MAX_SPEED_CHANGE:
+                        target_speed = self._current_fan_speed + MAX_SPEED_CHANGE * (1 if delta > 0 else -1)
 
-                    self.set_fan_speed(fan_speed)
+                    self._current_fan_speed = target_speed
+                    self.set_fan_speed(target_speed)
 
             except Exception as e:
                 logging.warning(f"Fan control error: {e}")
