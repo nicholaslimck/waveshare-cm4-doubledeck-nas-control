@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -27,6 +28,9 @@ UPDATE_INTERVAL = int(os.environ.get('NAS_UPDATE_INTERVAL', '1'))
 
 # Disk temperature update interval (smartctl is slow, so update less frequently)
 DISK_TEMP_UPDATE_INTERVAL = int(os.environ.get('NAS_DISK_TEMP_INTERVAL', '30'))
+
+# lsblk cache TTL (disk structure rarely changes, so cache results)
+LSBLK_CACHE_TTL = int(os.environ.get('NAS_LSBLK_CACHE_TTL', '10'))
 
 
 # =============================================================================
@@ -80,9 +84,7 @@ class Disk:
                 self.temperature = 0
         except Exception as e:
             logging.debug(f"Error reading temperature for {self.id}: {e}")
-            # Keep previous temperature or default to 0
-            if self.temperature is None:
-                self.temperature = 0
+            # Keep previous temperature (already initialized to 0)
 
     def get_smart_data(self) -> Dict[str, Any]:
         """
@@ -114,9 +116,15 @@ class StorageParameters:
     disk0: Disk
     disk1: Disk
     raid: bool = False
+    _lsblk_cache: Optional[Dict[str, Any]] = field(default=None, repr=False)
+    _lsblk_cache_time: float = field(default=0.0, repr=False)
 
-    def update(self) -> None:
-        """Update storage parameters from lsblk output."""
+    def _get_lsblk_data(self) -> Optional[Dict[str, Any]]:
+        """Get lsblk data with caching to reduce subprocess overhead."""
+        now = time.time()
+        if self._lsblk_cache is not None and (now - self._lsblk_cache_time) < LSBLK_CACHE_TTL:
+            return self._lsblk_cache
+
         try:
             result = subprocess.run(
                 ['lsblk', '-b', '-o', 'NAME,FSTYPE,FSSIZE,FSAVAIL,FSUSED', '--json'],
@@ -126,17 +134,33 @@ class StorageParameters:
             )
             if result.returncode != 0:
                 logging.debug(f"lsblk returned non-zero: {result.returncode}")
-                return
+                return self._lsblk_cache  # Return stale cache on error
 
-            data = json.loads(result.stdout)
-            blockdevices = data.get('blockdevices', [])
+            self._lsblk_cache = json.loads(result.stdout)
+            self._lsblk_cache_time = now
+            return self._lsblk_cache
+        except subprocess.TimeoutExpired:
+            logging.warning("lsblk timeout")
+            return self._lsblk_cache
+        except json.JSONDecodeError as e:
+            logging.debug(f"Error parsing lsblk output: {e}")
+            return self._lsblk_cache
 
-            if not blockdevices:
-                return
+    def update(self) -> None:
+        """Update storage parameters from lsblk output."""
+        data = self._get_lsblk_data()
+        if data is None:
+            return
 
+        blockdevices = data.get('blockdevices', [])
+        if not blockdevices:
+            return
+
+        try:
             # Check for RAID volumes
             for device in blockdevices:
-                if device['name'] in [self.disk0.id, self.disk1.id]:
+                device_name = device.get('name')
+                if device_name in [self.disk0.id, self.disk1.id]:
                     fstype = device.get('fstype') or ''
                     if 'raid' in fstype.lower():
                         self.raid = True
@@ -144,16 +168,14 @@ class StorageParameters:
 
             # Calculate capacity and usage of each disk
             for device in blockdevices:
+                device_name = device.get('name')
                 for disk in [self.disk0, self.disk1]:
-                    if device['name'] == disk.id:
+                    if device_name == disk.id:
                         if device.get('children'):
                             disk.children = device['children']
                             disk.update()
-
-        except subprocess.TimeoutExpired:
-            logging.warning("lsblk timeout")
-        except (json.JSONDecodeError, KeyError) as e:
-            logging.debug(f"Error parsing lsblk output: {e}")
+        except (KeyError, TypeError) as e:
+            logging.debug(f"Error processing lsblk data: {e}")
 
 
 @dataclass
@@ -174,6 +196,9 @@ class SystemParameters:
 
     flag: int = 0  # 0 = unpartitioned, >0 = detected but not installed
 
+    # Thread lock for safe access to shared state from multiple threads
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
     def __post_init__(self) -> None:
         """Initialize storage parameters and disk usage with configured values."""
         if not self.disk_parameters:
@@ -185,6 +210,7 @@ class SystemParameters:
         """Main update loop for all system parameters."""
         while True:
             try:
+                # Collect values first (some operations like network speed take time)
                 self.disk_parameters.update()
                 self._update_ip_address()
                 self._update_cpu_usage()
@@ -199,18 +225,39 @@ class SystemParameters:
             except Exception:
                 logging.exception('Parameter update failed')
 
+    def get_snapshot(self) -> dict:
+        """Get a thread-safe snapshot of current system parameters.
+
+        Returns:
+            Dictionary with current values, safe to read from other threads.
+        """
+        with self._lock:
+            return {
+                'cpu_usage': self.cpu_usage,
+                'memory_usage': self.memory_usage,
+                'cpu_temperature': self.cpu_temperature,
+                'rx_speed': self.rx_speed,
+                'tx_speed': self.tx_speed,
+                'ip_address': self.ip_address,
+                'disk_usage': self.disk_usage,
+                'disk_parameters': self.disk_parameters,
+                'flag': self.flag,
+            }
+
     def _update_ip_address(self) -> None:
         """Update IP address by attempting connection to external host."""
+        s = None
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(2)
             s.connect_ex(('8.8.8.8', 80))
-            ip = s.getsockname()[0]
-            s.close()
-            self.ip_address = ip
+            self.ip_address = s.getsockname()[0]
         except (socket.error, OSError) as e:
             logging.debug(f"Error getting IP address: {e}")
             # Keep previous IP address
+        finally:
+            if s is not None:
+                s.close()
 
     def _update_temperature(self) -> None:
         """Update CPU temperature from thermal zone."""
@@ -241,9 +288,12 @@ class SystemParameters:
             with open('/proc/net/dev') as f:
                 for line in f:
                     if ':' in line:
-                        iface, stats = line.split(':')
+                        iface, stats = line.split(':', 1)
                         if iface.strip() == interface:
-                            return int(stats.split()[column])
+                            parts = stats.split()
+                            if len(parts) > column:
+                                return int(parts[column])
+                            return None
         except (FileNotFoundError, ValueError, IndexError) as e:
             logging.debug(f"Error reading network stats: {e}")
         return None

@@ -98,12 +98,83 @@ font02_15 = ImageFont.truetype("./Font/Font02.ttf", 15)
 font02_17 = ImageFont.truetype("./Font/Font02.ttf", 17)
 font02_18 = ImageFont.truetype("./Font/Font02.ttf", 18)
 font02_20 = ImageFont.truetype("./Font/Font02.ttf", 20)
-font02_28 = ImageFont.truetype("./Font/Font02.ttf", 28)  # Title font
+font02_28 = ImageFont.truetype("./Font/Font02.ttf", 28)
+
+# Semantic font aliases for clarity
+FONT_TITLE = font02_28
+FONT_HEADING = font02_20
+FONT_LABEL = font02_15
+FONT_VALUE = font02_17
+FONT_VALUE_LARGE = font02_18
+FONT_SMALL = font02_13
+FONT_TINY = font02_10
+
+# Image paths
+HMI1_IMAGE_PATH = 'pic/BL.jpg'
+HMI2_IMAGE_PATH = 'pic/Disk.jpg'
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+def calculate_arc_angle(percent: float, max_percent: float = 100.0) -> float:
+    """
+    Calculate arc end angle for a percentage value, clamped to valid range.
+
+    Args:
+        percent: The percentage value (0-100 typically).
+        max_percent: Maximum percentage value (default 100).
+
+    Returns:
+        Arc end angle in degrees, starting from -90 (top of circle).
+    """
+    clamped = min(max(percent, 0), max_percent)
+    return -90 + (clamped * 360 / max_percent)
+
+
+def draw_disk_bar(
+    draw: ImageDraw.ImageDraw,
+    x: int, y: int,
+    width: int, height: int,
+    used_percentage: float,
+    capacity: int,
+    show_percentage: bool = True,
+    fill_color: int = COLOR_PURPLE,
+    text_color: int = COLOR_YELLOW,
+    font: ImageFont.FreeTypeFont = font02_13
+) -> None:
+    """
+    Draw a disk usage bar with optional percentage text.
+
+    Args:
+        draw: ImageDraw object to draw on.
+        x, y: Top-left corner coordinates.
+        width, height: Bar dimensions.
+        used_percentage: Disk usage percentage (0-100).
+        capacity: Disk capacity (0 means disk not available).
+        show_percentage: Whether to display percentage text.
+        fill_color: Fill color for the usage bar.
+        text_color: Color for percentage text.
+        font: Font for percentage text.
+    """
+    # Draw outer border
+    draw.rectangle((x, y, x + width, y + height))
+
+    if capacity == 0:
+        # Disk not available - fill with black
+        draw.rectangle((x + 1, y + 1, x + width - 1, y + height - 1), fill=0x000000)
+    else:
+        # Draw usage bar (clamped to 100%)
+        clamped_percent = min(used_percentage, 100)
+        fill_width = clamped_percent * (width - 2) / 100
+        draw.rectangle((x + 1, y + 1, x + 1 + fill_width, y + height - 1), fill=fill_color)
+
+        if show_percentage:
+            # Center text in bar
+            text_x = x + width // 2 - 10
+            draw.text((text_x, y - 1), f'{int(used_percentage)}%', fill=text_color, font=font)
+
 
 def format_speed(speed: float) -> Tuple[str, int]:
     """
@@ -292,6 +363,7 @@ class Display:
         self._last_activity_time: float = time.time()  # For auto-dim
         self._brightness: int = BRIGHTNESS_DEFAULT
         self._has_error: bool = False  # Error state indicator
+        self._successful_renders: int = 0  # Counter for error reset
         self._render_cache: RenderCache = RenderCache()  # For skip-render optimization
         self._force_render: bool = True  # Force first render
 
@@ -466,11 +538,19 @@ class Display:
                     else:
                         self.HMI2()
 
+                    # Track successful renders to reset error indicator
+                    self._successful_renders += 1
+                    if self._has_error and self._successful_renders >= 10:
+                        logging.info('Clearing error indicator after successful renders')
+                        self._has_error = False
+                        self._successful_renders = 0
+
                 time.sleep(REFRESH_INTERVAL)
 
             except IOError as e:
                 logging.warning(e)
                 self._has_error = True
+                self._successful_renders = 0  # Reset counter on error
             except KeyboardInterrupt:
                 self.disp.module_exit()
                 logging.info("quit:")
@@ -538,7 +618,11 @@ class Display:
 
     def init_HMI1_base(self) -> None:
         """Initialize the base image for HMI1 (Device Status) screen."""
-        image = Image.open('pic/BL.jpg')
+        if not os.path.exists(HMI1_IMAGE_PATH):
+            logging.error(f'Required image not found: {HMI1_IMAGE_PATH}')
+            raise FileNotFoundError(f'Missing image: {HMI1_IMAGE_PATH}')
+
+        image = Image.open(HMI1_IMAGE_PATH)
 
         draw = ImageDraw.Draw(image)
         draw.text((90, 2), 'Device Status', fill=COLOR_GOLD, font=font02_28)
@@ -561,7 +645,11 @@ class Display:
 
     def init_HMI2_base(self) -> None:
         """Initialize the base image for HMI2 (Storage Focus) screen."""
-        image = Image.open('pic/Disk.jpg')
+        if not os.path.exists(HMI2_IMAGE_PATH):
+            logging.error(f'Required image not found: {HMI2_IMAGE_PATH}')
+            raise FileNotFoundError(f'Missing image: {HMI2_IMAGE_PATH}')
+
+        image = Image.open(HMI2_IMAGE_PATH)
 
         draw = ImageDraw.Draw(image)
         draw.text((60, 55), 'CPU Used', fill=COLOR_GRAY, font=font02_20)
@@ -604,23 +692,24 @@ class Display:
 
         # CPU usage gauge
         cpu_usage = self.system_parameters.cpu_usage
-        draw_centered_percentage(draw, cpu_usage, 34, 100, font02_15, COLOR_YELLOW)
-        draw.arc(HMI1_CPU_ARC, -90, -90 + (cpu_usage * 360 / 100), fill=COLOR_GREEN, width=8)
+        draw_centered_percentage(draw, cpu_usage, 34, 100, FONT_LABEL, COLOR_YELLOW)
+        draw.arc(HMI1_CPU_ARC, -90, calculate_arc_angle(cpu_usage), fill=COLOR_GREEN, width=8)
 
         # System disk usage gauge
         disk_usage = self.system_parameters.disk_usage
-        draw_centered_percentage(draw, disk_usage.percent, 114, 100, font02_15, COLOR_YELLOW)
-        draw.arc(HMI1_DISK_ARC, -90, -90 + (disk_usage.percent * 360 / 100), fill=COLOR_PURPLE, width=8)
+        disk_percent = disk_usage.percent if disk_usage else 0.0
+        draw_centered_percentage(draw, disk_percent, 114, 100, FONT_LABEL, COLOR_YELLOW)
+        draw.arc(HMI1_DISK_ARC, -90, calculate_arc_angle(disk_percent), fill=COLOR_PURPLE, width=8)
 
         # Memory usage gauge
         memory_usage = self.system_parameters.memory_usage
-        draw_centered_percentage(draw, memory_usage, 192, 100, font02_18, COLOR_YELLOW)
-        draw.arc(HMI1_RAM_ARC, -90, -90 + (memory_usage * 360 / 100), fill=COLOR_YELLOW, width=8)
+        draw_centered_percentage(draw, memory_usage, 192, 100, FONT_VALUE_LARGE, COLOR_YELLOW)
+        draw.arc(HMI1_RAM_ARC, -90, calculate_arc_angle(memory_usage), fill=COLOR_YELLOW, width=8)
 
-        # Temperature gauge
+        # Temperature gauge (clamped to 100 for arc display)
         temp_t = self.system_parameters.cpu_temperature
-        draw.text((268, 100), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=font02_18)
-        draw.arc(HMI1_TEMP_ARC, -90, -90 + (temp_t * 360 / 100), fill=COLOR_BLUE, width=8)
+        draw.text((268, 100), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_VALUE_LARGE)
+        draw.arc(HMI1_TEMP_ARC, -90, calculate_arc_angle(temp_t), fill=COLOR_BLUE, width=8)
 
         # Network speeds
         tx_text, tx_color = format_speed(self.system_parameters.tx_speed)
@@ -628,37 +717,37 @@ class Display:
         draw.text((250, 190), tx_text, fill=tx_color, font=font02_17)
         draw.text((183, 190), rx_text, fill=rx_color, font=font02_17)
 
-        # Storage drive usage bars
+        # Storage drive usage bars (only if disk_parameters available)
         disk_parameters = self.system_parameters.disk_parameters
-
-        # Disk 0 bar
-        draw.rectangle((40, 177, 142, 190))
-        if disk_parameters.disk0.capacity == 0:
-            draw.rectangle((41, 178, 141, 189), fill=0x000000)
-        else:
-            draw.rectangle((41, 178, 41 + disk_parameters.disk0.used_percentage, 189), fill=COLOR_PURPLE)
-            draw.text((80, 176), f'{math.floor(disk_parameters.disk0.used_percentage)}%',
-                      fill=COLOR_YELLOW, font=font02_13)
-
-        # Disk 1 bar
-        draw.rectangle((40, 197, 142, 210))
-        if disk_parameters.disk1.capacity == 0:
-            draw.rectangle((41, 198, 141, 209), fill=0x000000)
-        else:
-            draw.rectangle((41, 198, 41 + disk_parameters.disk1.used_percentage, 209), fill=COLOR_PURPLE)
-            draw.text((80, 196), f'{math.floor(disk_parameters.disk1.used_percentage)}%',
-                      fill=COLOR_YELLOW, font=font02_13)
-
-        # RAID indicator
-        if disk_parameters.raid:
-            draw.text((40, 161), 'RAID', fill=COLOR_GOLD, font=font02_15)
-
-        # Disk warning messages
-        if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-            if self.system_parameters.flag > 0:
-                draw.text((30, 210), 'Detected but not installed', fill=COLOR_GOLD, font=font02_15)
+        if disk_parameters is not None:
+            # Disk 0 bar (width=102, so percentage maps to 0-100 pixels)
+            disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
+            draw.rectangle((40, 177, 142, 190))
+            if disk_parameters.disk0.capacity == 0:
+                draw.rectangle((41, 178, 141, 189), fill=0x000000)
             else:
-                draw.text((50, 210), 'Unpartitioned/NC', fill=COLOR_GOLD, font=font02_15)
+                draw.rectangle((41, 178, 41 + disk0_pct, 189), fill=COLOR_PURPLE)
+                draw.text((80, 176), f'{int(disk0_pct)}%', fill=COLOR_YELLOW, font=FONT_SMALL)
+
+            # Disk 1 bar
+            disk1_pct = min(disk_parameters.disk1.used_percentage, 100)
+            draw.rectangle((40, 197, 142, 210))
+            if disk_parameters.disk1.capacity == 0:
+                draw.rectangle((41, 198, 141, 209), fill=0x000000)
+            else:
+                draw.rectangle((41, 198, 41 + disk1_pct, 209), fill=COLOR_PURPLE)
+                draw.text((80, 196), f'{int(disk1_pct)}%', fill=COLOR_YELLOW, font=FONT_SMALL)
+
+            # RAID indicator
+            if disk_parameters.raid:
+                draw.text((40, 161), 'RAID', fill=COLOR_GOLD, font=FONT_LABEL)
+
+            # Disk warning messages
+            if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
+                if self.system_parameters.flag > 0:
+                    draw.text((30, 210), 'Detected but not installed', fill=COLOR_GOLD, font=FONT_LABEL)
+                else:
+                    draw.text((50, 210), 'Unpartitioned/NC', fill=COLOR_GOLD, font=FONT_LABEL)
 
         # Error indicator
         if self._has_error:
@@ -697,24 +786,25 @@ class Display:
 
         # CPU usage (smaller gauge)
         cpu_usage = self.system_parameters.cpu_usage
-        draw_centered_percentage(draw, cpu_usage, 84, 105, font02_13, COLOR_YELLOW)
-        draw.arc(HMI2_CPU_ARC, -90, -90 + (cpu_usage * 360 / 100), fill=COLOR_PURPLE, width=3)
+        draw_centered_percentage(draw, cpu_usage, 84, 105, FONT_SMALL, COLOR_YELLOW)
+        draw.arc(HMI2_CPU_ARC, -90, calculate_arc_angle(cpu_usage), fill=COLOR_PURPLE, width=3)
 
         # System disk usage with humanized values
         disk_usage = self.system_parameters.disk_usage
-        disk_used = humanize.naturalsize(disk_usage.used)
-        disk_free = humanize.naturalsize(disk_usage.free)
-        draw.text((85, 140), disk_used, fill=COLOR_GRAY, font=font02_13)
-        draw.text((85, 163), disk_free, fill=COLOR_GRAY, font=font02_13)
+        if disk_usage is not None:
+            disk_used = humanize.naturalsize(disk_usage.used)
+            disk_free = humanize.naturalsize(disk_usage.free)
+            draw.text((85, 140), disk_used, fill=COLOR_GRAY, font=FONT_SMALL)
+            draw.text((85, 163), disk_free, fill=COLOR_GRAY, font=FONT_SMALL)
 
-        # Usage bars (avoid division by zero)
-        if disk_usage.total > 0:
-            draw.rectangle((45, 157, 45 + ((disk_usage.used / disk_usage.total) * 87), 160), fill=COLOR_PURPLE)
-            draw.rectangle((45, 180, 45 + ((disk_usage.free / disk_usage.total) * 87), 183), fill=COLOR_PURPLE)
+            # Usage bars (avoid division by zero)
+            if disk_usage.total > 0:
+                draw.rectangle((45, 157, 45 + ((disk_usage.used / disk_usage.total) * 87), 160), fill=COLOR_PURPLE)
+                draw.rectangle((45, 180, 45 + ((disk_usage.free / disk_usage.total) * 87), 183), fill=COLOR_PURPLE)
 
         # Temperature
         temp_t = self.system_parameters.cpu_temperature
-        draw.text((170, 205), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=font02_15)
+        draw.text((170, 205), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_LABEL)
 
         # Network speeds
         tx_text, tx_color = format_speed(self.system_parameters.tx_speed)
@@ -722,33 +812,35 @@ class Display:
         draw.text((210, 154), tx_text, fill=tx_color, font=font02_15)
         draw.text((210, 174), rx_text, fill=rx_color, font=font02_15)
 
-        # Storage drive info
+        # Storage drive info (only if disk_parameters available)
         disk_parameters = self.system_parameters.disk_parameters
-
-        # Disk 0
-        draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0.available), fill=COLOR_GRAY, font=font02_15)
-        if disk_parameters.disk0.capacity == 0:
-            draw.rectangle((186, 110, 273, 113), fill=0x000000)
-        else:
-            draw.rectangle((186, 110, 186 + (disk_parameters.disk0.used_percentage * 87 / 100), 113), fill=COLOR_PURPLE)
-
-        # Disk 1
-        draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=COLOR_GRAY, font=font02_15)
-        if disk_parameters.disk1.capacity == 0:
-            draw.rectangle((186, 131, 273, 134), fill=0x000000)
-        else:
-            draw.rectangle((186, 131, 186 + (disk_parameters.disk1.used_percentage * 87 / 100), 134), fill=COLOR_PURPLE)
-
-        # RAID indicator
-        if disk_parameters.raid:
-            draw.text((160, 78), 'RAID', fill=COLOR_GRAY, font=font02_15)
-
-        # Disk warning messages
-        if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-            if self.system_parameters.flag > 0:
-                draw.text((155, 135), 'Detected but not installed', fill=COLOR_GRAY, font=font02_14)
+        if disk_parameters is not None:
+            # Disk 0
+            disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
+            draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0.available), fill=COLOR_GRAY, font=FONT_LABEL)
+            if disk_parameters.disk0.capacity == 0:
+                draw.rectangle((186, 110, 273, 113), fill=0x000000)
             else:
-                draw.text((190, 135), 'Unpartitioned/NC', fill=COLOR_GRAY, font=font02_14)
+                draw.rectangle((186, 110, 186 + (disk0_pct * 87 / 100), 113), fill=COLOR_PURPLE)
+
+            # Disk 1
+            disk1_pct = min(disk_parameters.disk1.used_percentage, 100)
+            draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=COLOR_GRAY, font=FONT_LABEL)
+            if disk_parameters.disk1.capacity == 0:
+                draw.rectangle((186, 131, 273, 134), fill=0x000000)
+            else:
+                draw.rectangle((186, 131, 186 + (disk1_pct * 87 / 100), 134), fill=COLOR_PURPLE)
+
+            # RAID indicator
+            if disk_parameters.raid:
+                draw.text((160, 78), 'RAID', fill=COLOR_GRAY, font=FONT_LABEL)
+
+            # Disk warning messages
+            if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
+                if self.system_parameters.flag > 0:
+                    draw.text((155, 135), 'Detected but not installed', fill=COLOR_GRAY, font=font02_14)
+                else:
+                    draw.text((190, 135), 'Unpartitioned/NC', fill=COLOR_GRAY, font=font02_14)
 
         # Error indicator
         if self._has_error:
