@@ -25,6 +25,9 @@ DISK1_ID = os.environ.get('NAS_DISK1_ID', 'sdb')
 # Update interval in seconds
 UPDATE_INTERVAL = int(os.environ.get('NAS_UPDATE_INTERVAL', '1'))
 
+# Disk temperature update interval (smartctl is slow, so update less frequently)
+DISK_TEMP_UPDATE_INTERVAL = int(os.environ.get('NAS_DISK_TEMP_INTERVAL', '30'))
+
 
 # =============================================================================
 # Data Classes
@@ -42,11 +45,16 @@ class Disk:
     temperature: int = 0
 
     children: List[Dict[str, Any]] = field(default_factory=list)
+    _last_temp_update: float = field(default=0.0, repr=False)
 
     def update(self) -> None:
         """Update disk capacity, usage, and temperature."""
         self.calculate_capacity_and_usage()
-        self.update_temperature()
+        # Only update temperature if enough time has passed (smartctl is slow)
+        now = time.time()
+        if now - self._last_temp_update >= DISK_TEMP_UPDATE_INTERVAL:
+            self.update_temperature()
+            self._last_temp_update = now
 
     def calculate_capacity_and_usage(self) -> None:
         """Calculate total capacity and usage from child partitions."""

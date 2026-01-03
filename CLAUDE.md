@@ -28,9 +28,9 @@ sudo pip3 install RPi.GPIO psutil humanize spidev
 
 ### Core Module: controller/display.py
 The `Display` class orchestrates everything with 4 concurrent execution paths:
-- **Main thread**: Refreshes LCD every 0.2s via `render()`
+- **Main thread**: Refreshes LCD via `render()` with change detection to skip redundant frames
 - **Thread 1** (`system_parameters.update`): Monitors system metrics every 1s
-- **Thread 2** (`key`): Handles USER button input on GPIO 20
+- **Thread 2** (`key`): Handles USER button input on GPIO 20 using edge detection
 - **Thread 3** (`control_fan`): Adjusts PWM fan speed every 5s based on temperature
 
 ### Hardware Abstraction: controller/lib/
@@ -63,6 +63,8 @@ Environment variables for customization (set before running):
 | `NAS_DISK0_ID` | `sda` | First disk device ID |
 | `NAS_DISK1_ID` | `sdb` | Second disk device ID |
 | `NAS_UPDATE_INTERVAL` | `1` | Monitoring update interval (seconds) |
+| `NAS_REFRESH_INTERVAL` | `0.5` | Display refresh interval (seconds) |
+| `NAS_DISK_TEMP_INTERVAL` | `30` | Disk temperature polling interval (seconds) |
 
 Example:
 ```bash

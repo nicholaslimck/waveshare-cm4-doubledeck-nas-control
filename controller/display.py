@@ -1,9 +1,11 @@
 import logging
 import math
+import os
 import threading
 import time
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple
+from typing import Optional, Tuple
 
 import RPi.GPIO as GPIO
 import humanize
@@ -40,9 +42,13 @@ USER_BUTTON_PIN = 20
 DISPLAY_MODE_TOGGLE_THRESHOLD = 5   # 0.5 seconds hold
 FAN_MODE_TOGGLE_THRESHOLD = 20      # 2.0 seconds hold
 
-# Display timing
-REFRESH_INTERVAL = 0.2  # seconds
+# Display timing (configurable via environment variable)
+REFRESH_INTERVAL = float(os.environ.get('NAS_REFRESH_INTERVAL', '0.5'))  # seconds (default 2 FPS)
 DATETIME_FORMAT = "%Y-%m-%d   %H:%M:%S"
+
+# Change detection thresholds for skip-render optimization
+CHANGE_THRESHOLD_PERCENT = 1.0  # Skip render if values changed less than this
+CHANGE_THRESHOLD_TEMP = 0.5     # Temperature change threshold
 
 # Fan control parameters
 FAN_MIN_DUTY_CYCLE = 35  # Minimum duty cycle to prevent motor stall
@@ -161,6 +167,105 @@ def has_disk_warning(disk0_capacity: int, disk1_capacity: int) -> bool:
     return disk0_capacity == 0 or disk1_capacity == 0
 
 
+@dataclass
+class RenderCache:
+    """Cache of last rendered values for change detection."""
+    cpu_usage: float = -1.0
+    memory_usage: float = -1.0
+    disk_percent: float = -1.0
+    cpu_temperature: float = -1.0
+    rx_speed: float = -1.0
+    tx_speed: float = -1.0
+    disk0_percent: float = -1.0
+    disk1_percent: float = -1.0
+    ip_address: str = ""
+    display_mode: Optional['DisplayMode'] = None
+    last_minute: int = -1  # For time display (only update on minute change)
+
+    def has_significant_change(
+        self,
+        cpu_usage: float,
+        memory_usage: float,
+        disk_percent: float,
+        cpu_temperature: float,
+        rx_speed: float,
+        tx_speed: float,
+        disk0_percent: float,
+        disk1_percent: float,
+        ip_address: str,
+        display_mode: 'DisplayMode',
+        current_minute: int
+    ) -> bool:
+        """Check if any value has changed significantly enough to warrant a re-render."""
+        # Always render on mode change
+        if display_mode != self.display_mode:
+            return True
+
+        # Always render on minute change (for time display)
+        if current_minute != self.last_minute:
+            return True
+
+        # Check IP change
+        if ip_address != self.ip_address:
+            return True
+
+        # Check percentage-based values
+        if abs(cpu_usage - self.cpu_usage) >= CHANGE_THRESHOLD_PERCENT:
+            return True
+        if abs(memory_usage - self.memory_usage) >= CHANGE_THRESHOLD_PERCENT:
+            return True
+        if abs(disk_percent - self.disk_percent) >= CHANGE_THRESHOLD_PERCENT:
+            return True
+        if abs(disk0_percent - self.disk0_percent) >= CHANGE_THRESHOLD_PERCENT:
+            return True
+        if abs(disk1_percent - self.disk1_percent) >= CHANGE_THRESHOLD_PERCENT:
+            return True
+
+        # Check temperature
+        if abs(cpu_temperature - self.cpu_temperature) >= CHANGE_THRESHOLD_TEMP:
+            return True
+
+        # Check network speeds (use relative change for speed)
+        if self.rx_speed > 0 and abs(rx_speed - self.rx_speed) / max(self.rx_speed, 1) > 0.1:
+            return True
+        if self.tx_speed > 0 and abs(tx_speed - self.tx_speed) / max(self.tx_speed, 1) > 0.1:
+            return True
+        # Also trigger on speed appearing/disappearing
+        if (rx_speed > 100) != (self.rx_speed > 100):
+            return True
+        if (tx_speed > 100) != (self.tx_speed > 100):
+            return True
+
+        return False
+
+    def update(
+        self,
+        cpu_usage: float,
+        memory_usage: float,
+        disk_percent: float,
+        cpu_temperature: float,
+        rx_speed: float,
+        tx_speed: float,
+        disk0_percent: float,
+        disk1_percent: float,
+        ip_address: str,
+        display_mode: 'DisplayMode',
+        current_minute: int
+    ) -> None:
+        """Update the cache with current values."""
+        self.cpu_usage = cpu_usage
+        self.memory_usage = memory_usage
+        self.disk_percent = disk_percent
+        self.cpu_temperature = cpu_temperature
+        self.rx_speed = rx_speed
+        self.tx_speed = tx_speed
+        self.disk0_percent = disk0_percent
+        self.disk1_percent = disk1_percent
+        self.ip_address = ip_address
+        self.display_mode = display_mode
+        self.last_minute = current_minute
+
+
 class Display:
     """
     Main display controller for the Waveshare CM4 Double-Deck NAS.
@@ -179,10 +284,12 @@ class Display:
         self._last_activity_time: float = time.time()  # For auto-dim
         self._brightness: int = BRIGHTNESS_DEFAULT
         self._has_error: bool = False  # Error state indicator
+        self._render_cache: RenderCache = RenderCache()  # For skip-render optimization
+        self._force_render: bool = True  # Force first render
 
-        # Pre-rendered base images
-        self.hmi1_base: Image.Image | None = None
-        self.hmi2_base: Image.Image | None = None
+        # Pre-rendered base images (will be rotated during init)
+        self.hmi1_base: Optional[Image.Image] = None
+        self.hmi2_base: Optional[Image.Image] = None
 
         # System monitoring
         self.system_parameters = SystemParameters()
@@ -217,18 +324,33 @@ class Display:
 
     def key(self) -> None:
         """
-        Handle USER button input for mode switching.
+        Handle USER button input for mode switching using edge detection.
 
         - Hold for 0.5 seconds: Toggle display mode (Device Status / Storage Focus)
         - Hold for 2.0 seconds: Toggle fan mode (Default / Turbo)
 
         Also resets the auto-dim timer on any button press.
+
+        Uses GPIO edge detection to avoid constant CPU polling. The thread
+        sleeps until a button press is detected, then measures hold duration.
         """
-        counter = 0
         while True:
+            # Wait for button press (falling edge) - blocks until pressed
+            GPIO.wait_for_edge(USER_BUTTON_PIN, GPIO.FALLING, timeout=1000)
+
             if GPIO.input(USER_BUTTON_PIN) == 0:
-                counter += 1
-            else:
+                # Button is pressed - measure hold duration
+                press_start = time.time()
+
+                # Wait for button release, checking periodically
+                while GPIO.input(USER_BUTTON_PIN) == 0:
+                    time.sleep(0.05)  # 50ms resolution for hold detection
+
+                hold_duration = time.time() - press_start
+
+                # Convert to 0.1s units for threshold comparison
+                counter = int(hold_duration * 10)
+
                 if counter > FAN_MODE_TOGGLE_THRESHOLD:
                     # Toggle fan mode
                     if self.fan_mode == FanMode.DEFAULT:
@@ -247,9 +369,6 @@ class Display:
                         logging.info('HMI display mode: Device Status')
                         self.display_mode = DisplayMode.DEVICE_STATUS
                     self._reset_activity()
-
-                counter = 0
-            time.sleep(0.1)
 
     def _reset_activity(self) -> None:
         """Reset the activity timer and restore full brightness."""
@@ -281,17 +400,61 @@ class Display:
 
         Continuously updates the LCD with the appropriate HMI screen
         based on the current display mode. Also handles auto-dimming.
+        Uses change detection to skip redundant renders.
         """
         while True:
             try:
                 # Update auto-dim state
                 self._update_auto_dim()
 
-                # Render the appropriate HMI screen
-                if self.display_mode == DisplayMode.DEVICE_STATUS:
-                    self.HMI1()
-                else:
-                    self.HMI2()
+                # Get current values for change detection
+                current_minute = time.localtime().tm_min
+                disk_params = self.system_parameters.disk_parameters
+                disk_usage = self.system_parameters.disk_usage
+
+                # Extract values with defaults for None safety
+                disk_percent = disk_usage.percent if disk_usage else 0.0
+                disk0_pct = disk_params.disk0.used_percentage if disk_params else 0.0
+                disk1_pct = disk_params.disk1.used_percentage if disk_params else 0.0
+
+                # Check if we need to render
+                should_render = self._force_render or self._render_cache.has_significant_change(
+                    cpu_usage=self.system_parameters.cpu_usage,
+                    memory_usage=self.system_parameters.memory_usage,
+                    disk_percent=disk_percent,
+                    cpu_temperature=self.system_parameters.cpu_temperature,
+                    rx_speed=self.system_parameters.rx_speed,
+                    tx_speed=self.system_parameters.tx_speed,
+                    disk0_percent=disk0_pct,
+                    disk1_percent=disk1_pct,
+                    ip_address=self.system_parameters.ip_address,
+                    display_mode=self.display_mode,
+                    current_minute=current_minute
+                )
+
+                if should_render:
+                    self._force_render = False
+
+                    # Update cache
+                    self._render_cache.update(
+                        cpu_usage=self.system_parameters.cpu_usage,
+                        memory_usage=self.system_parameters.memory_usage,
+                        disk_percent=disk_percent,
+                        cpu_temperature=self.system_parameters.cpu_temperature,
+                        rx_speed=self.system_parameters.rx_speed,
+                        tx_speed=self.system_parameters.tx_speed,
+                        disk0_percent=disk0_pct,
+                        disk1_percent=disk1_pct,
+                        ip_address=self.system_parameters.ip_address,
+                        display_mode=self.display_mode,
+                        current_minute=current_minute
+                    )
+
+                    # Render the appropriate HMI screen
+                    if self.display_mode == DisplayMode.DEVICE_STATUS:
+                        self.HMI1()
+                    else:
+                        self.HMI2()
 
                 time.sleep(REFRESH_INTERVAL)
 
