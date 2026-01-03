@@ -556,7 +556,14 @@ class Display:
                 self._update_auto_dim()
 
                 # Get current values for change detection
-                current_minute = time.localtime().tm_min
+                now = time.localtime()
+                current_minute = now.tm_min
+                current_second = now.tm_sec
+
+                # Force render at minute boundary for clock sync
+                if current_second == 0 and self._render_cache.last_minute != current_minute:
+                    self._force_render = True
+
                 disk_params = self.system_parameters.disk_parameters
                 disk_usage = self.system_parameters.disk_usage
 
