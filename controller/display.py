@@ -39,7 +39,7 @@ class FanMode(Enum):
 USER_BUTTON_PIN = 20
 
 # Button timing (in 0.1s increments, so 5 = 0.5s, 20 = 2s)
-DISPLAY_MODE_TOGGLE_THRESHOLD = 5   # 0.5 seconds hold
+DISPLAY_MODE_TOGGLE_THRESHOLD = 2   # 0.2 seconds hold
 FAN_MODE_TOGGLE_THRESHOLD = 20      # 2.0 seconds hold
 
 # Display timing (configurable via environment variable)
@@ -646,7 +646,7 @@ class Display:
         else:
             duty_cycle = 0
 
-        self.disp._pwm1.ChangeDutyCycle(duty_cycle)
+        self.disp._fan_pwm.ChangeDutyCycle(duty_cycle)
 
     def control_fan(self) -> None:
         """
