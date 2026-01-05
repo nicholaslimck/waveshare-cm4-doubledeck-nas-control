@@ -261,7 +261,10 @@ class LCD_2inch(RaspberryPi):
                 self._pix_buffer_portrait = self.np.zeros((imheight, imwidth, 2), dtype=self.np.uint8)
 
             self._convert_rgb888_to_rgb565(img, self._pix_buffer_portrait)
-            pix_bytes = self._pix_buffer_portrait.tobytes()
+            if self._pix_buffer_portrait is not None:
+                pix_bytes = self._pix_buffer_portrait.tobytes()
+            else:
+                pix_bytes = b''  # Fallback, should not happen
 
             self.command(CMD_MADCTL)
             self.data(MADCTL_PORTRAIT)

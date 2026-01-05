@@ -646,7 +646,8 @@ class Display:
         else:
             duty_cycle = 0
 
-        self.disp._fan_pwm.ChangeDutyCycle(duty_cycle)
+        if self.disp._fan_pwm is not None:
+            self.disp._fan_pwm.ChangeDutyCycle(duty_cycle)
 
     def control_fan(self) -> None:
         """

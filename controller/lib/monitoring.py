@@ -211,7 +211,8 @@ class SystemParameters:
         while True:
             try:
                 # Collect values first (some operations like network speed take time)
-                self.disk_parameters.update()
+                if self.disk_parameters is not None:
+                    self.disk_parameters.update()
                 self._update_ip_address()
                 self._update_cpu_usage()
                 self._update_temperature()
