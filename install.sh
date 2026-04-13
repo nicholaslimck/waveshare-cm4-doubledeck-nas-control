@@ -17,11 +17,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_FILE="/etc/systemd/system/nas-display.service"
 
-# Default values
 AUTOSTART=""
-NETWORK_INTERFACE="end0"
-DISK0_ID="sda"
-DISK1_ID="sdb"
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -129,11 +125,15 @@ fi
 
 # Autostart configuration
 configure_autostart() {
+    # Defaults match controller/lib/monitoring.py
+    local NETWORK_INTERFACE="end0"
+    local DISK0_ID="sda"
+    local DISK1_ID="sdb"
+
     echo ""
     print_status "Configuring autostart service..."
     echo ""
 
-    # Prompt for environment variables
     read -p "Network interface [${NETWORK_INTERFACE}]: " input
     NETWORK_INTERFACE="${input:-$NETWORK_INTERFACE}"
 

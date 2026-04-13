@@ -15,10 +15,15 @@ python main.py
 
 ### Dependencies
 
-Install via apt and pip:
+Run the install script (installs system packages, Python packages, and optionally configures autostart):
 ```bash
-sudo apt-get install python3-pip python3-pil python3-numpy
-sudo pip3 install RPi.GPIO psutil humanize spidev
+sudo ./install.sh
+```
+
+Or install manually:
+```bash
+sudo apt-get install python3-pip python3-pil python3-numpy smartmontools
+sudo pip3 install -r requirements.txt
 ```
 
 ## Architecture
@@ -65,6 +70,9 @@ Environment variables for customization (set before running):
 | `NAS_UPDATE_INTERVAL` | `1` | Monitoring update interval (seconds) |
 | `NAS_REFRESH_INTERVAL` | `0.5` | Display refresh interval (seconds) |
 | `NAS_DISK_TEMP_INTERVAL` | `30` | Disk temperature polling interval (seconds) |
+| `NAS_BRIGHTNESS_DEFAULT` | `100` | Default backlight brightness (0-100) |
+| `NAS_BRIGHTNESS_DIM` | `30` | Auto-dim brightness level (0-100) |
+| `NAS_AUTO_DIM_TIMEOUT` | `300` | Auto-dim timeout (seconds) |
 
 Example:
 ```bash
