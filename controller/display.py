@@ -837,7 +837,7 @@ class Display:
         if self.fan_mode == FanMode.TURBO:
             draw.text((255, 35), 'TURBO', fill=COLOR_CYAN, font=font02_13)
 
-        image = image.rotate(180)
+        image = image.transpose(Image.Transpose.ROTATE_180)
         self.disp.ShowImage(image)
 
     def HMI2(self, snapshot: dict) -> None:
@@ -929,5 +929,5 @@ class Display:
         if self.fan_mode == FanMode.TURBO:
             draw.text((255, 5), 'TURBO', fill=COLOR_CYAN, font=font02_13)
 
-        image = image.rotate(180)
+        image = image.transpose(Image.Transpose.ROTATE_180)
         self.disp.ShowImage(image)
