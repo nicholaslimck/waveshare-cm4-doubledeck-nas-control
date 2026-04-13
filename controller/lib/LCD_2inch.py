@@ -59,6 +59,11 @@ class LCD_2inch(RaspberryPi):
         self.digital_write(self.DC_PIN, self.GPIO.HIGH)
         self.spi_writebyte([val])
 
+    def data_batch(self, vals: list) -> None:
+        """Send multiple data bytes in a single SPI transaction."""
+        self.digital_write(self.DC_PIN, self.GPIO.HIGH)
+        self.spi_writebyte(vals)
+
     def reset(self) -> None:
         """Reset the display."""
         self.GPIO.output(self.RST_PIN, self.GPIO.HIGH)
@@ -86,25 +91,15 @@ class LCD_2inch(RaspberryPi):
 
         # Column Address Set (0-319)
         self.command(CMD_CASET)
-        self.data(0x00)
-        self.data(0x00)
-        self.data(0x01)
-        self.data(0x3F)
+        self.data_batch([0x00, 0x00, 0x01, 0x3F])
 
         # Row Address Set (0-239)
         self.command(CMD_RASET)
-        self.data(0x00)
-        self.data(0x00)
-        self.data(0x00)
-        self.data(0xEF)
+        self.data_batch([0x00, 0x00, 0x00, 0xEF])
 
         # Porch Setting
         self.command(CMD_PORCTRL)
-        self.data(0x0C)
-        self.data(0x0C)
-        self.data(0x00)
-        self.data(0x33)
-        self.data(0x33)
+        self.data_batch([0x0C, 0x0C, 0x00, 0x33, 0x33])
 
         # Gate Control
         self.command(CMD_GCTRL)
@@ -136,42 +131,17 @@ class LCD_2inch(RaspberryPi):
 
         # Power Control 1
         self.command(CMD_PWCTRL1)
-        self.data(0xA4)
-        self.data(0xA1)
+        self.data_batch([0xA4, 0xA1])
 
         # Positive Voltage Gamma
         self.command(CMD_PVGAMCTRL)
-        self.data(0xD0)
-        self.data(0x08)
-        self.data(0x11)
-        self.data(0x08)
-        self.data(0x0C)
-        self.data(0x15)
-        self.data(0x39)
-        self.data(0x33)
-        self.data(0x50)
-        self.data(0x36)
-        self.data(0x13)
-        self.data(0x14)
-        self.data(0x29)
-        self.data(0x2D)
+        self.data_batch([0xD0, 0x08, 0x11, 0x08, 0x0C, 0x15, 0x39, 0x33,
+                         0x50, 0x36, 0x13, 0x14, 0x29, 0x2D])
 
         # Negative Voltage Gamma
         self.command(CMD_NVGAMCTRL)
-        self.data(0xD0)
-        self.data(0x08)
-        self.data(0x10)
-        self.data(0x08)
-        self.data(0x06)
-        self.data(0x06)
-        self.data(0x39)
-        self.data(0x44)
-        self.data(0x51)
-        self.data(0x0B)
-        self.data(0x16)
-        self.data(0x14)
-        self.data(0x2F)
-        self.data(0x31)
+        self.data_batch([0xD0, 0x08, 0x10, 0x08, 0x06, 0x06, 0x39, 0x44,
+                         0x51, 0x0B, 0x16, 0x14, 0x2F, 0x31])
 
         # Display Inversion On (again for gamma)
         self.command(CMD_INVON)
