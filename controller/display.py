@@ -564,8 +564,11 @@ class Display:
                 if current_second == 0 and self._render_cache.last_minute != current_minute:
                     self._force_render = True
 
-                disk_params = self.system_parameters.disk_parameters
-                disk_usage = self.system_parameters.disk_usage
+                # Take a thread-safe snapshot of system parameters
+                snapshot = self.system_parameters.get_snapshot()
+
+                disk_params = snapshot['disk_parameters']
+                disk_usage = snapshot['disk_usage']
 
                 # Extract values with defaults for None safety
                 disk_percent = disk_usage.percent if disk_usage else 0.0
@@ -574,15 +577,15 @@ class Display:
 
                 # Check if we need to render
                 should_render = self._force_render or self._render_cache.has_significant_change(
-                    cpu_usage=self.system_parameters.cpu_usage,
-                    memory_usage=self.system_parameters.memory_usage,
+                    cpu_usage=snapshot['cpu_usage'],
+                    memory_usage=snapshot['memory_usage'],
                     disk_percent=disk_percent,
-                    cpu_temperature=self.system_parameters.cpu_temperature,
-                    rx_speed=self.system_parameters.rx_speed,
-                    tx_speed=self.system_parameters.tx_speed,
+                    cpu_temperature=snapshot['cpu_temperature'],
+                    rx_speed=snapshot['rx_speed'],
+                    tx_speed=snapshot['tx_speed'],
                     disk0_percent=disk0_pct,
                     disk1_percent=disk1_pct,
-                    ip_address=self.system_parameters.ip_address,
+                    ip_address=snapshot['ip_address'],
                     display_mode=self.display_mode,
                     fan_mode=self.fan_mode,
                     current_minute=current_minute
@@ -593,15 +596,15 @@ class Display:
 
                     # Update cache
                     self._render_cache.update(
-                        cpu_usage=self.system_parameters.cpu_usage,
-                        memory_usage=self.system_parameters.memory_usage,
+                        cpu_usage=snapshot['cpu_usage'],
+                        memory_usage=snapshot['memory_usage'],
                         disk_percent=disk_percent,
-                        cpu_temperature=self.system_parameters.cpu_temperature,
-                        rx_speed=self.system_parameters.rx_speed,
-                        tx_speed=self.system_parameters.tx_speed,
+                        cpu_temperature=snapshot['cpu_temperature'],
+                        rx_speed=snapshot['rx_speed'],
+                        tx_speed=snapshot['tx_speed'],
                         disk0_percent=disk0_pct,
                         disk1_percent=disk1_pct,
-                        ip_address=self.system_parameters.ip_address,
+                        ip_address=snapshot['ip_address'],
                         display_mode=self.display_mode,
                         fan_mode=self.fan_mode,
                         current_minute=current_minute
@@ -609,9 +612,9 @@ class Display:
 
                     # Render the appropriate HMI screen
                     if self.display_mode == DisplayMode.DEVICE_STATUS:
-                        self.HMI1()
+                        self.HMI1(snapshot)
                     else:
-                        self.HMI2()
+                        self.HMI2(snapshot)
 
                     # Track successful renders to reset error indicator
                     self._successful_renders += 1
@@ -663,8 +666,9 @@ class Display:
         """
         while True:
             try:
-                cpu_temp = self.system_parameters.cpu_temperature
-                disk_params = self.system_parameters.disk_parameters
+                snapshot = self.system_parameters.get_snapshot()
+                cpu_temp = snapshot['cpu_temperature']
+                disk_params = snapshot['disk_parameters']
                 disk0_temp = disk_params.disk0.temperature if disk_params else 0
                 disk1_temp = disk_params.disk1.temperature if disk_params else 0
 
@@ -744,7 +748,7 @@ class Display:
 
         self.hmi2_base = image
 
-    def HMI1(self) -> None:
+    def HMI1(self, snapshot: dict) -> None:
         """
         Render the Device Status HMI screen.
 
@@ -764,38 +768,37 @@ class Display:
         draw.text((5, 50), time_t, fill=COLOR_GOLD, font=font02_15)
 
         # IP Address
-        ip = self.system_parameters.ip_address
-        draw.text((170, 50), f'IP : {ip}', fill=COLOR_GOLD, font=font02_15)
+        draw.text((170, 50), f'IP : {snapshot["ip_address"]}', fill=COLOR_GOLD, font=font02_15)
 
         # CPU usage gauge
-        cpu_usage = self.system_parameters.cpu_usage
+        cpu_usage = snapshot['cpu_usage']
         draw_centered_percentage(draw, cpu_usage, 34, 100, FONT_LABEL, COLOR_YELLOW)
         draw.arc(HMI1_CPU_ARC, -90, calculate_arc_angle(cpu_usage), fill=COLOR_GREEN, width=8)
 
         # System disk usage gauge
-        disk_usage = self.system_parameters.disk_usage
+        disk_usage = snapshot['disk_usage']
         disk_percent = disk_usage.percent if disk_usage else 0.0
         draw_centered_percentage(draw, disk_percent, 114, 100, FONT_LABEL, COLOR_YELLOW)
         draw.arc(HMI1_DISK_ARC, -90, calculate_arc_angle(disk_percent), fill=COLOR_PURPLE, width=8)
 
         # Memory usage gauge
-        memory_usage = self.system_parameters.memory_usage
+        memory_usage = snapshot['memory_usage']
         draw_centered_percentage(draw, memory_usage, 192, 100, FONT_VALUE_LARGE, COLOR_YELLOW)
         draw.arc(HMI1_RAM_ARC, -90, calculate_arc_angle(memory_usage), fill=COLOR_YELLOW, width=8)
 
         # Temperature gauge (clamped to 100 for arc display)
-        temp_t = self.system_parameters.cpu_temperature
+        temp_t = snapshot['cpu_temperature']
         draw.text((268, 100), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_VALUE_LARGE)
         draw.arc(HMI1_TEMP_ARC, -90, calculate_arc_angle(temp_t), fill=COLOR_BLUE, width=8)
 
         # Network speeds
-        tx_text, tx_color = format_speed(self.system_parameters.tx_speed)
-        rx_text, rx_color = format_speed(self.system_parameters.rx_speed)
+        tx_text, tx_color = format_speed(snapshot['tx_speed'])
+        rx_text, rx_color = format_speed(snapshot['rx_speed'])
         draw.text((250, 190), tx_text, fill=tx_color, font=font02_17)
         draw.text((183, 190), rx_text, fill=rx_color, font=font02_17)
 
         # Storage drive usage bars (only if disk_parameters available)
-        disk_parameters = self.system_parameters.disk_parameters
+        disk_parameters = snapshot['disk_parameters']
         if disk_parameters is not None:
             # Disk 0 bar (width=102, so percentage maps to 0-100 pixels)
             disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
@@ -821,7 +824,7 @@ class Display:
 
             # Disk warning messages
             if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-                if self.system_parameters.flag > 0:
+                if snapshot['flag'] > 0:
                     draw.text((30, 210), 'Detected but not installed', fill=COLOR_GOLD, font=FONT_LABEL)
                 else:
                     draw.text((50, 210), 'Unpartitioned/NC', fill=COLOR_GOLD, font=FONT_LABEL)
@@ -837,7 +840,7 @@ class Display:
         image = image.rotate(180)
         self.disp.ShowImage(image)
 
-    def HMI2(self) -> None:
+    def HMI2(self, snapshot: dict) -> None:
         """
         Render the Storage Focus HMI screen.
 
@@ -858,16 +861,15 @@ class Display:
         draw.text((40, 10), time_t, fill=COLOR_WHITE, font=font02_15)
 
         # IP Address
-        ip = self.system_parameters.ip_address
-        draw.text((155, 58), f'IP : {ip}', fill=COLOR_GRAY, font=font02_17)
+        draw.text((155, 58), f'IP : {snapshot["ip_address"]}', fill=COLOR_GRAY, font=font02_17)
 
         # CPU usage (smaller gauge)
-        cpu_usage = self.system_parameters.cpu_usage
+        cpu_usage = snapshot['cpu_usage']
         draw_centered_percentage(draw, cpu_usage, 84, 105, FONT_SMALL, COLOR_YELLOW)
         draw.arc(HMI2_CPU_ARC, -90, calculate_arc_angle(cpu_usage), fill=COLOR_PURPLE, width=3)
 
         # System disk usage with humanized values
-        disk_usage = self.system_parameters.disk_usage
+        disk_usage = snapshot['disk_usage']
         if disk_usage is not None:
             disk_used = humanize.naturalsize(disk_usage.used)
             disk_free = humanize.naturalsize(disk_usage.free)
@@ -880,17 +882,17 @@ class Display:
                 draw.rectangle((45, 180, 45 + ((disk_usage.free / disk_usage.total) * 87), 183), fill=COLOR_PURPLE)
 
         # Temperature
-        temp_t = self.system_parameters.cpu_temperature
+        temp_t = snapshot['cpu_temperature']
         draw.text((170, 205), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_LABEL)
 
         # Network speeds
-        tx_text, tx_color = format_speed(self.system_parameters.tx_speed)
-        rx_text, rx_color = format_speed(self.system_parameters.rx_speed)
+        tx_text, tx_color = format_speed(snapshot['tx_speed'])
+        rx_text, rx_color = format_speed(snapshot['rx_speed'])
         draw.text((210, 154), tx_text, fill=tx_color, font=font02_15)
         draw.text((210, 174), rx_text, fill=rx_color, font=font02_15)
 
         # Storage drive info (only if disk_parameters available)
-        disk_parameters = self.system_parameters.disk_parameters
+        disk_parameters = snapshot['disk_parameters']
         if disk_parameters is not None:
             # Disk 0
             disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
@@ -914,7 +916,7 @@ class Display:
 
             # Disk warning messages
             if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-                if self.system_parameters.flag > 0:
+                if snapshot['flag'] > 0:
                     draw.text((155, 135), 'Detected but not installed', fill=COLOR_GRAY, font=font02_14)
                 else:
                     draw.text((190, 135), 'Unpartitioned/NC', fill=COLOR_GRAY, font=font02_14)
