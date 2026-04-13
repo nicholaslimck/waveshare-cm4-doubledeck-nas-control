@@ -39,7 +39,7 @@ class FanMode(Enum):
 USER_BUTTON_PIN = 20
 
 # Button timing (in 0.1s increments, so 5 = 0.5s, 20 = 2s)
-DISPLAY_MODE_TOGGLE_THRESHOLD = 2   # 0.2 seconds hold
+DISPLAY_MODE_TOGGLE_THRESHOLD = 5   # 0.5 seconds hold
 FAN_MODE_TOGGLE_THRESHOLD = 20      # 2.0 seconds hold
 
 # Display timing (configurable via environment variable)
@@ -79,10 +79,10 @@ FAN_CURVES = {
 
 MAX_SPEED_CHANGE = 10  # Max speed change per update cycle for smooth ramping
 
-# Display brightness (0-100)
-BRIGHTNESS_DEFAULT = 100
-BRIGHTNESS_DIM = 30
-AUTO_DIM_TIMEOUT = 300  # seconds (5 minutes)
+# Display brightness (0-100, configurable via environment variables)
+BRIGHTNESS_DEFAULT = int(os.environ.get('NAS_BRIGHTNESS_DEFAULT', '100'))
+BRIGHTNESS_DIM = int(os.environ.get('NAS_BRIGHTNESS_DIM', '30'))
+AUTO_DIM_TIMEOUT = int(os.environ.get('NAS_AUTO_DIM_TIMEOUT', '300'))  # seconds
 
 # Colors (RGB hex values)
 COLOR_GOLD = 0xf7ba47
@@ -103,6 +103,10 @@ HMI1_TEMP_ARC = (253, 80, 313, 142)
 
 # HMI2 CPU Arc coordinates
 HMI2_CPU_ARC = (66, 90, 111, 135)
+
+# Disk warning messages
+WARN_DETECTED_NOT_INSTALLED = 'Detected but not installed'
+WARN_UNPARTITIONED = 'Unpartitioned/NC'
 
 
 # =============================================================================
@@ -205,11 +209,11 @@ def format_speed(speed: float) -> Tuple[str, int]:
         Tuple of (formatted string, color hex value).
     """
     if speed < 1024:
-        return f"{math.floor(speed)}B/s", COLOR_LIGHT_GREEN
+        return f"{math.floor(speed)}B/s", COLOR_GRAY
     elif speed < 1024 * 1024:
         return f"{math.floor(speed / 1024)}KB/s", COLOR_CYAN
     else:
-        return f"{math.floor(speed / 1024 / 1024)}MB/s", COLOR_BLUE
+        return f"{math.floor(speed / 1024 / 1024)}MB/s", COLOR_LIGHT_GREEN
 
 
 def draw_centered_percentage(
@@ -495,6 +499,7 @@ class Display:
                     time.sleep(0.05)  # 50ms resolution for hold detection
 
                 hold_duration = time.time() - press_start
+                logging.debug(f'Button held for {hold_duration:.2f}s')
 
                 # Convert to 0.1s units for threshold comparison
                 counter = int(hold_duration * 10)
@@ -825,13 +830,14 @@ class Display:
             # Disk warning messages
             if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
                 if snapshot['flag'] > 0:
-                    draw.text((30, 210), 'Detected but not installed', fill=COLOR_GOLD, font=FONT_LABEL)
+                    draw.text((30, 210), WARN_DETECTED_NOT_INSTALLED, fill=COLOR_GOLD, font=FONT_LABEL)
                 else:
-                    draw.text((50, 210), 'Unpartitioned/NC', fill=COLOR_GOLD, font=FONT_LABEL)
+                    draw.text((50, 210), WARN_UNPARTITIONED, fill=COLOR_GOLD, font=FONT_LABEL)
 
         # Error indicator
         if self._has_error:
-            draw.ellipse((300, 35, 315, 50), fill=0xff0000)
+            draw.ellipse((295, 32, 318, 55), fill=0xff0000)
+            draw.text((301, 34), '!', fill=COLOR_WHITE, font=FONT_VALUE)
 
         # Turbo mode indicator
         if self.fan_mode == FanMode.TURBO:
@@ -917,13 +923,14 @@ class Display:
             # Disk warning messages
             if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
                 if snapshot['flag'] > 0:
-                    draw.text((155, 135), 'Detected but not installed', fill=COLOR_GRAY, font=font02_14)
+                    draw.text((155, 135), WARN_DETECTED_NOT_INSTALLED, fill=COLOR_GRAY, font=font02_14)
                 else:
-                    draw.text((190, 135), 'Unpartitioned/NC', fill=COLOR_GRAY, font=font02_14)
+                    draw.text((190, 135), WARN_UNPARTITIONED, fill=COLOR_GRAY, font=font02_14)
 
         # Error indicator
         if self._has_error:
-            draw.ellipse((300, 5, 315, 20), fill=0xff0000)
+            draw.ellipse((295, 2, 318, 25), fill=0xff0000)
+            draw.text((301, 4), '!', fill=COLOR_WHITE, font=FONT_VALUE)
 
         # Turbo mode indicator
         if self.fan_mode == FanMode.TURBO:
