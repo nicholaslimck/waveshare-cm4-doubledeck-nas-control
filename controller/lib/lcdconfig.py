@@ -93,6 +93,7 @@ class RaspberryPi:
         self.GPIO.setup(self.RST_PIN, self.GPIO.OUT)
         self.GPIO.setup(self.DC_PIN, self.GPIO.OUT)
         self.GPIO.setup(self.BL_PIN, self.GPIO.OUT)
+        self.GPIO.setup(self.FAN_PIN, self.GPIO.OUT)
         self.GPIO.output(self.BL_PIN, self.GPIO.HIGH)
 
         # Initialize SPI
@@ -169,29 +170,16 @@ class RaspberryPi:
 
     def module_init(self) -> int:
         """
-        Initialize the display and fan hardware.
-
-        Sets up GPIO pins and starts PWM for backlight and fan.
+        Initialize PWM for backlight and fan.
 
         Returns:
             0 on success.
         """
-        self.GPIO.setup(self.RST_PIN, self.GPIO.OUT)
-        self.GPIO.setup(self.DC_PIN, self.GPIO.OUT)
-        self.GPIO.setup(self.BL_PIN, self.GPIO.OUT)
-        self.GPIO.setup(self.FAN_PIN, self.GPIO.OUT)
-
-        # Initialize backlight PWM at 100% duty cycle
         self._bl_pwm = self.GPIO.PWM(self.BL_PIN, self.BL_freq)
         self._bl_pwm.start(100)
 
-        # Initialize fan PWM at 75% duty cycle
         self._fan_pwm = self.GPIO.PWM(self.FAN_PIN, self.BL_freq)
         self._fan_pwm.start(75)
-
-        if self.SPI is not None:
-            self.SPI.max_speed_hz = self.SPEED
-            self.SPI.mode = 0b00
 
         return 0
 
@@ -209,3 +197,5 @@ class RaspberryPi:
             self._bl_pwm.stop()
         if self._fan_pwm is not None:
             self._fan_pwm.stop()
+
+        self.GPIO.cleanup()
