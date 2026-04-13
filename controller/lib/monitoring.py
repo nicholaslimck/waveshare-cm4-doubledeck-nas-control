@@ -199,6 +199,11 @@ class SystemParameters:
     # Thread lock for safe access to shared state from multiple threads
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
+    # Previous network readings for delta-based speed calculation
+    _prev_rx_bytes: Optional[int] = field(default=None, repr=False)
+    _prev_tx_bytes: Optional[int] = field(default=None, repr=False)
+    _prev_net_time: float = field(default=0.0, repr=False)
+
     def __post_init__(self) -> None:
         """Initialize storage parameters and disk usage with configured values."""
         if not self.disk_parameters:
@@ -210,7 +215,6 @@ class SystemParameters:
         """Main update loop for all system parameters."""
         while True:
             try:
-                # Collect values first (some operations like network speed take time)
                 if self.disk_parameters is not None:
                     self.disk_parameters.update()
                 self._update_ip_address()
@@ -300,27 +304,23 @@ class SystemParameters:
         return None
 
     def _update_network_speed(self) -> None:
-        """Update network RX and TX speeds."""
-        sample_time = 0.1
+        """Update network RX and TX speeds using delta between update cycles."""
+        now = time.time()
+        rx_bytes = self._get_network_bytes(self.network_interface, is_rx=True)
+        tx_bytes = self._get_network_bytes(self.network_interface, is_rx=False)
 
-        # Get initial readings
-        rx_start = self._get_network_bytes(self.network_interface, is_rx=True)
-        tx_start = self._get_network_bytes(self.network_interface, is_rx=False)
-
-        if rx_start is None or tx_start is None:
+        if rx_bytes is None or tx_bytes is None:
             return
 
-        time.sleep(sample_time)
+        if self._prev_rx_bytes is not None and self._prev_tx_bytes is not None:
+            elapsed = now - self._prev_net_time
+            if elapsed > 0:
+                self.rx_speed = (rx_bytes - self._prev_rx_bytes) / elapsed
+                self.tx_speed = (tx_bytes - self._prev_tx_bytes) / elapsed
 
-        # Get final readings
-        rx_end = self._get_network_bytes(self.network_interface, is_rx=True)
-        tx_end = self._get_network_bytes(self.network_interface, is_rx=False)
-
-        if rx_end is None or tx_end is None:
-            return
-
-        self.rx_speed = (rx_end - rx_start) / sample_time
-        self.tx_speed = (tx_end - tx_start) / sample_time
+        self._prev_rx_bytes = rx_bytes
+        self._prev_tx_bytes = tx_bytes
+        self._prev_net_time = now
 
     def _update_cpu_usage(self) -> None:
         """Update CPU usage percentage."""
