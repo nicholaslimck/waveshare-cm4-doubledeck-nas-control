@@ -187,14 +187,11 @@ class LCD_2inch(RaspberryPi):
             img: NumPy array of RGB888 image data.
             buffer: Pre-allocated buffer to store RGB565 data.
         """
-        buffer[..., 0] = self.np.add(
-            self.np.bitwise_and(img[..., 0], 0xF8),
-            self.np.right_shift(img[..., 1], 5)
-        )
-        buffer[..., 1] = self.np.add(
-            self.np.bitwise_and(self.np.left_shift(img[..., 1], 3), 0xE0),
-            self.np.right_shift(img[..., 2], 3)
-        )
+        buffer[..., 0] = img[..., 0] & 0xF8
+        buffer[..., 0] += img[..., 1] >> 5
+        buffer[..., 1] = img[..., 1] << 3
+        buffer[..., 1] &= 0xE0
+        buffer[..., 1] += img[..., 2] >> 3
 
     def ShowImage(self, image: Any, Xstart: int = 0, Ystart: int = 0) -> None:
         """
@@ -231,10 +228,7 @@ class LCD_2inch(RaspberryPi):
                 self._pix_buffer_portrait = self.np.zeros((imheight, imwidth, 2), dtype=self.np.uint8)
 
             self._convert_rgb888_to_rgb565(img, self._pix_buffer_portrait)
-            if self._pix_buffer_portrait is not None:
-                pix_bytes = self._pix_buffer_portrait.tobytes()
-            else:
-                pix_bytes = b''  # Fallback, should not happen
+            pix_bytes = self._pix_buffer_portrait.tobytes()
 
             self.command(CMD_MADCTL)
             self.data(MADCTL_PORTRAIT)

@@ -32,6 +32,9 @@ DISK_TEMP_UPDATE_INTERVAL = int(os.environ.get('NAS_DISK_TEMP_INTERVAL', '30'))
 # lsblk cache TTL (disk structure rarely changes, so cache results)
 LSBLK_CACHE_TTL = int(os.environ.get('NAS_LSBLK_CACHE_TTL', '10'))
 
+# IP address refresh interval (socket syscall is cheap but unnecessary every second)
+IP_REFRESH_INTERVAL = 30
+
 
 # =============================================================================
 # Data Classes
@@ -109,6 +112,20 @@ class Disk:
         return {}
 
 
+@dataclass(frozen=True)
+class DiskSnapshot:
+    """Immutable snapshot of disk state, safe to share across threads."""
+    disk0_capacity: int
+    disk0_available: int
+    disk0_used_percentage: float
+    disk0_temperature: int
+    disk1_capacity: int
+    disk1_available: int
+    disk1_used_percentage: float
+    disk1_temperature: int
+    raid: bool
+
+
 @dataclass
 class StorageParameters:
     """Storage parameters for monitoring multiple disks."""
@@ -151,31 +168,25 @@ class StorageParameters:
         data = self._get_lsblk_data()
         if data is None:
             return
-
-        blockdevices = data.get('blockdevices', [])
-        if not blockdevices:
+        devices = data.get('blockdevices', [])
+        if not devices:
             return
-
         try:
-            # Check for RAID volumes
-            for device in blockdevices:
-                device_name = device.get('name')
-                if device_name in [self.disk0.id, self.disk1.id]:
-                    fstype = device.get('fstype') or ''
-                    if 'raid' in fstype.lower():
-                        self.raid = True
-                        break
-
-            # Calculate capacity and usage of each disk
-            for device in blockdevices:
-                device_name = device.get('name')
-                for disk in [self.disk0, self.disk1]:
-                    if device_name == disk.id:
-                        if device.get('children'):
-                            disk.children = device['children']
-                            disk.update()
+            self._apply_lsblk(devices)
         except (KeyError, TypeError) as e:
             logging.debug(f"Error processing lsblk data: {e}")
+
+    def _apply_lsblk(self, devices: list) -> None:
+        """Single-pass RAID detection and disk capacity/usage update."""
+        for device in devices:
+            name = device.get('name')
+            fstype = (device.get('fstype') or '').lower()
+            if name in (self.disk0.id, self.disk1.id) and 'raid' in fstype:
+                self.raid = True
+            for disk in (self.disk0, self.disk1):
+                if name == disk.id and device.get('children'):
+                    disk.children = device['children']
+                    disk.update()
 
 
 @dataclass
@@ -203,6 +214,9 @@ class SystemParameters:
     _prev_rx_bytes: Optional[int] = field(default=None, repr=False)
     _prev_tx_bytes: Optional[int] = field(default=None, repr=False)
     _prev_net_time: float = field(default=0.0, repr=False)
+
+    # IP address refresh throttle
+    _last_ip_update: float = field(default=0.0, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize storage parameters and disk usage with configured values."""
@@ -235,8 +249,26 @@ class SystemParameters:
 
         Returns:
             Dictionary with current values, safe to read from other threads.
+            disk_parameters is a frozen DiskSnapshot to avoid sharing the live
+            mutable StorageParameters object across thread boundaries. Note: disk
+            fields are copied atomically per-attribute but not as a unit — capacity
+            and used_percentage may originate from adjacent update cycles if the
+            monitoring thread is mid-update. This is pre-existing and acceptable
+            for a display application.
         """
         with self._lock:
+            dp = self.disk_parameters
+            disk_snapshot = DiskSnapshot(
+                disk0_capacity=dp.disk0.capacity,
+                disk0_available=dp.disk0.available,
+                disk0_used_percentage=dp.disk0.used_percentage,
+                disk0_temperature=dp.disk0.temperature,
+                disk1_capacity=dp.disk1.capacity,
+                disk1_available=dp.disk1.available,
+                disk1_used_percentage=dp.disk1.used_percentage,
+                disk1_temperature=dp.disk1.temperature,
+                raid=dp.raid,
+            ) if dp else None
             return {
                 'cpu_usage': self.cpu_usage,
                 'memory_usage': self.memory_usage,
@@ -245,21 +277,24 @@ class SystemParameters:
                 'tx_speed': self.tx_speed,
                 'ip_address': self.ip_address,
                 'disk_usage': self.disk_usage,
-                'disk_parameters': self.disk_parameters,
+                'disk_parameters': disk_snapshot,
                 'flag': self.flag,
             }
 
     def _update_ip_address(self) -> None:
         """Update IP address by attempting connection to external host."""
+        now = time.time()
+        if now - self._last_ip_update < IP_REFRESH_INTERVAL:
+            return
         s = None
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(2)
             s.connect_ex(('8.8.8.8', 80))
             self.ip_address = s.getsockname()[0]
+            self._last_ip_update = now
         except (socket.error, OSError) as e:
             logging.debug(f"Error getting IP address: {e}")
-            # Keep previous IP address
         finally:
             if s is not None:
                 s.close()
