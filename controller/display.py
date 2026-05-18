@@ -522,77 +522,70 @@ class Display:
                 self._set_brightness(BRIGHTNESS_DIM)
 
     def render(self) -> None:
-        """
-        Main render loop for the display.
-
-        Continuously updates the LCD with the appropriate HMI screen
-        based on the current display mode. Also handles auto-dimming.
-        Uses change detection to skip redundant renders.
-        """
+        """Main render loop — infinite loop with error handling and sleep."""
         while True:
             try:
-                # Update auto-dim state
-                self._update_auto_dim()
-
-                # Get current values for change detection
-                now = time.localtime()
-                current_minute = now.tm_min
-                current_second = now.tm_sec
-
-                # Force render at minute boundary for clock sync
-                if current_second == 0 and self._render_cache.last_minute != current_minute:
-                    self._force_render = True
-
-                # Take a thread-safe snapshot of system parameters
-                snapshot = self.system_parameters.get_snapshot()
-
-                disk_params = snapshot['disk_parameters']
-                disk_usage = snapshot['disk_usage']
-
-                new_cache = RenderCache(
-                    cpu_usage=snapshot['cpu_usage'],
-                    memory_usage=snapshot['memory_usage'],
-                    disk_percent=disk_usage.percent if disk_usage else 0.0,
-                    cpu_temperature=snapshot['cpu_temperature'],
-                    rx_speed=snapshot['rx_speed'],
-                    tx_speed=snapshot['tx_speed'],
-                    disk0_percent=disk_params.disk0.used_percentage if disk_params else 0.0,
-                    disk1_percent=disk_params.disk1.used_percentage if disk_params else 0.0,
-                    ip_address=snapshot['ip_address'],
-                    display_mode=self.display_mode,
-                    fan_mode=self.fan_mode,
-                    last_minute=current_minute,
-                )
-
-                should_render = self._force_render or self._render_cache.has_significant_change(new_cache)
-
-                if should_render:
-                    self._force_render = False
-                    self._render_cache.update(new_cache)
-
-                    # Render the appropriate HMI screen
-                    if self.display_mode == DisplayMode.DEVICE_STATUS:
-                        self.HMI1(snapshot)
-                    else:
-                        self.HMI2(snapshot)
-
-                    # Track successful renders to reset error indicator
-                    self._successful_renders += 1
-                    if self._has_error and self._successful_renders >= 10:
-                        logging.info('Clearing error indicator after successful renders')
-                        self._has_error = False
-                        self._successful_renders = 0
-
+                self._tick()
                 time.sleep(REFRESH_INTERVAL)
-
             except IOError as e:
                 logging.warning(e)
                 self._has_error = True
-                self._successful_renders = 0  # Reset counter on error
+                self._successful_renders = 0
             except KeyboardInterrupt:
                 self.disp.module_exit()
                 logging.info("quit:")
                 exit()
+
+    def _tick(self) -> None:
+        """Single render cycle: auto-dim, change detection, conditional HMI dispatch."""
+        self._update_auto_dim()
+
+        now = time.localtime()
+        if now.tm_sec == 0 and self._render_cache.last_minute != now.tm_min:
+            self._force_render = True
+
+        snapshot = self.system_parameters.get_snapshot()
+        new_cache = self._build_cache(snapshot, now.tm_min)
+
+        if self._force_render or self._render_cache.has_significant_change(new_cache):
+            self._force_render = False
+            self._render_cache.update(new_cache)
+            self._dispatch_render(snapshot)
+            self._track_render_success()
+
+    def _build_cache(self, snapshot: dict, current_minute: int) -> RenderCache:
+        """Build a RenderCache from a system snapshot for change detection."""
+        disk_params = snapshot['disk_parameters']
+        disk_usage = snapshot['disk_usage']
+        return RenderCache(
+            cpu_usage=snapshot['cpu_usage'],
+            memory_usage=snapshot['memory_usage'],
+            disk_percent=disk_usage.percent if disk_usage else 0.0,
+            cpu_temperature=snapshot['cpu_temperature'],
+            rx_speed=snapshot['rx_speed'],
+            tx_speed=snapshot['tx_speed'],
+            disk0_percent=disk_params.disk0.used_percentage if disk_params else 0.0,
+            disk1_percent=disk_params.disk1.used_percentage if disk_params else 0.0,
+            ip_address=snapshot['ip_address'],
+            display_mode=self.display_mode,
+            fan_mode=self.fan_mode,
+            last_minute=current_minute,
+        )
+
+    def _dispatch_render(self, snapshot: dict) -> None:
+        """Dispatch to the correct HMI renderer based on current display mode."""
+        if self.display_mode == DisplayMode.DEVICE_STATUS:
+            self.HMI1(snapshot)
+        else:
+            self.HMI2(snapshot)
+
+    def _track_render_success(self) -> None:
+        """Increment successful render counter; clear error indicator after 10 consecutive."""
+        self._successful_renders += 1
+        if self._has_error and self._successful_renders >= 10:
+            logging.info('Clearing error indicator after successful renders')
+            self._has_error = False
+            self._successful_renders = 0
 
     def set_fan_speed(self, speed: int) -> None:
         """
