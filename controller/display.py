@@ -113,14 +113,32 @@ WARN_UNPARTITIONED = 'Unpartitioned/NC'
 # Fonts
 # =============================================================================
 
-font02_10 = ImageFont.truetype("./Font/Font02.ttf", 10)
-font02_13 = ImageFont.truetype("./Font/Font02.ttf", 13)
-font02_14 = ImageFont.truetype("./Font/Font02.ttf", 14)
-font02_15 = ImageFont.truetype("./Font/Font02.ttf", 15)
-font02_17 = ImageFont.truetype("./Font/Font02.ttf", 17)
-font02_18 = ImageFont.truetype("./Font/Font02.ttf", 18)
-font02_20 = ImageFont.truetype("./Font/Font02.ttf", 20)
-font02_28 = ImageFont.truetype("./Font/Font02.ttf", 28)
+def _load_fonts() -> dict:
+    try:
+        return {
+            'font02_10': ImageFont.truetype("./Font/Font02.ttf", 10),
+            'font02_13': ImageFont.truetype("./Font/Font02.ttf", 13),
+            'font02_14': ImageFont.truetype("./Font/Font02.ttf", 14),
+            'font02_15': ImageFont.truetype("./Font/Font02.ttf", 15),
+            'font02_17': ImageFont.truetype("./Font/Font02.ttf", 17),
+            'font02_18': ImageFont.truetype("./Font/Font02.ttf", 18),
+            'font02_20': ImageFont.truetype("./Font/Font02.ttf", 20),
+            'font02_28': ImageFont.truetype("./Font/Font02.ttf", 28),
+        }
+    except OSError as e:
+        logging.critical(f"Font file missing: {e}")
+        raise
+
+_fonts = _load_fonts()
+font02_10 = _fonts['font02_10']
+font02_13 = _fonts['font02_13']
+font02_14 = _fonts['font02_14']
+font02_15 = _fonts['font02_15']
+font02_17 = _fonts['font02_17']
+font02_18 = _fonts['font02_18']
+font02_20 = _fonts['font02_20']
+font02_28 = _fonts['font02_28']
+del _fonts
 
 # Semantic font aliases for clarity
 FONT_TITLE = font02_28
