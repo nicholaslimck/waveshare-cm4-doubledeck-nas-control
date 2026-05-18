@@ -539,6 +539,35 @@ class Display:
         self._brightness = brightness
         self.disp.bl_DutyCycle(brightness)
 
+    def _draw_disk_warning(
+        self,
+        draw: ImageDraw.ImageDraw,
+        snapshot: dict,
+        x_detected: int,
+        x_unpartitioned: int,
+        y: int,
+        font: ImageFont.FreeTypeFont,
+        color: int,
+    ) -> None:
+        disk_params = snapshot['disk_parameters']
+        if disk_params is None:
+            return
+        if not has_disk_warning(disk_params.disk0.capacity, disk_params.disk1.capacity):
+            return
+        if snapshot['flag'] > 0:
+            draw.text((x_detected, y), WARN_DETECTED_NOT_INSTALLED, fill=color, font=font)
+        else:
+            draw.text((x_unpartitioned, y), WARN_UNPARTITIONED, fill=color, font=font)
+
+    def _draw_error_indicator(self, draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
+        if self._has_error:
+            draw.ellipse((x, y, x + 23, y + 23), fill=0xff0000)
+            draw.text((x + 6, y + 2), '!', fill=COLOR_WHITE, font=FONT_VALUE)
+
+    def _draw_turbo_indicator(self, draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
+        if self.fan_mode == FanMode.TURBO:
+            draw.text((x, y), 'TURBO', fill=COLOR_CYAN, font=font02_13)
+
     def _update_auto_dim(self) -> None:
         """Check and apply auto-dim if idle timeout has elapsed."""
         if self._brightness == BRIGHTNESS_DEFAULT:
@@ -805,43 +834,21 @@ class Display:
         # Storage drive usage bars (only if disk_parameters available)
         disk_parameters = snapshot['disk_parameters']
         if disk_parameters is not None:
-            # Disk 0 bar (width=102, so percentage maps to 0-100 pixels)
-            disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
-            draw.rectangle((40, 177, 142, 190))
-            if disk_parameters.disk0.capacity == 0:
-                draw.rectangle((41, 178, 141, 189), fill=0x000000)
-            else:
-                draw.rectangle((41, 178, 41 + disk0_pct, 189), fill=COLOR_PURPLE)
-                draw.text((80, 176), f'{int(disk0_pct)}%', fill=COLOR_YELLOW, font=FONT_SMALL)
-
-            # Disk 1 bar
-            disk1_pct = min(disk_parameters.disk1.used_percentage, 100)
-            draw.rectangle((40, 197, 142, 210))
-            if disk_parameters.disk1.capacity == 0:
-                draw.rectangle((41, 198, 141, 209), fill=0x000000)
-            else:
-                draw.rectangle((41, 198, 41 + disk1_pct, 209), fill=COLOR_PURPLE)
-                draw.text((80, 196), f'{int(disk1_pct)}%', fill=COLOR_YELLOW, font=FONT_SMALL)
+            draw_disk_bar(draw, 40, 177, 102, 13,
+                          disk_parameters.disk0.used_percentage, disk_parameters.disk0.capacity,
+                          font=FONT_SMALL)
+            draw_disk_bar(draw, 40, 197, 102, 13,
+                          disk_parameters.disk1.used_percentage, disk_parameters.disk1.capacity,
+                          font=FONT_SMALL)
 
             # RAID indicator
             if disk_parameters.raid:
                 draw.text((40, 161), 'RAID', fill=COLOR_GOLD, font=FONT_LABEL)
 
-            # Disk warning messages
-            if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-                if snapshot['flag'] > 0:
-                    draw.text((30, 210), WARN_DETECTED_NOT_INSTALLED, fill=COLOR_GOLD, font=FONT_LABEL)
-                else:
-                    draw.text((50, 210), WARN_UNPARTITIONED, fill=COLOR_GOLD, font=FONT_LABEL)
+            self._draw_disk_warning(draw, snapshot, 30, 50, 210, FONT_LABEL, COLOR_GOLD)
 
-        # Error indicator
-        if self._has_error:
-            draw.ellipse((295, 32, 318, 55), fill=0xff0000)
-            draw.text((301, 34), '!', fill=COLOR_WHITE, font=FONT_VALUE)
-
-        # Turbo mode indicator
-        if self.fan_mode == FanMode.TURBO:
-            draw.text((255, 35), 'TURBO', fill=COLOR_CYAN, font=font02_13)
+        self._draw_error_indicator(draw, 295, 32)
+        self._draw_turbo_indicator(draw, 255, 35)
 
         image = image.transpose(Image.Transpose.ROTATE_180)
         self.disp.ShowImage(image)
@@ -920,21 +927,10 @@ class Display:
             if disk_parameters.raid:
                 draw.text((160, 78), 'RAID', fill=COLOR_GRAY, font=FONT_LABEL)
 
-            # Disk warning messages
-            if has_disk_warning(disk_parameters.disk0.capacity, disk_parameters.disk1.capacity):
-                if snapshot['flag'] > 0:
-                    draw.text((155, 135), WARN_DETECTED_NOT_INSTALLED, fill=COLOR_GRAY, font=font02_14)
-                else:
-                    draw.text((190, 135), WARN_UNPARTITIONED, fill=COLOR_GRAY, font=font02_14)
+            self._draw_disk_warning(draw, snapshot, 155, 190, 135, font02_14, COLOR_GRAY)
 
-        # Error indicator
-        if self._has_error:
-            draw.ellipse((295, 2, 318, 25), fill=0xff0000)
-            draw.text((301, 4), '!', fill=COLOR_WHITE, font=FONT_VALUE)
-
-        # Turbo mode indicator
-        if self.fan_mode == FanMode.TURBO:
-            draw.text((255, 5), 'TURBO', fill=COLOR_CYAN, font=font02_13)
+        self._draw_error_indicator(draw, 295, 2)
+        self._draw_turbo_indicator(draw, 255, 5)
 
         image = image.transpose(Image.Transpose.ROTATE_180)
         self.disp.ShowImage(image)
