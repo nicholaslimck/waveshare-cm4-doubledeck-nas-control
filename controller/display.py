@@ -325,95 +325,40 @@ class RenderCache:
     fan_mode: Optional['FanMode'] = None
     last_minute: int = -1  # For time display (only update on minute change)
 
-    def has_significant_change(
-        self,
-        cpu_usage: float,
-        memory_usage: float,
-        disk_percent: float,
-        cpu_temperature: float,
-        rx_speed: float,
-        tx_speed: float,
-        disk0_percent: float,
-        disk1_percent: float,
-        ip_address: str,
-        display_mode: 'DisplayMode',
-        fan_mode: 'FanMode',
-        current_minute: int
-    ) -> bool:
+    _PERCENT_FIELDS = ('cpu_usage', 'memory_usage', 'disk_percent', 'disk0_percent', 'disk1_percent')
+    _TEMP_FIELDS = ('cpu_temperature',)
+    _SPEED_FIELDS = ('rx_speed', 'tx_speed')
+
+    def has_significant_change(self, new: 'RenderCache') -> bool:
         """Check if any value has changed significantly enough to warrant a re-render."""
-        # Always render on mode change
-        if display_mode != self.display_mode:
+        if new.display_mode != self.display_mode:
             return True
-
-        # Always render on fan mode change
-        if fan_mode != self.fan_mode:
+        if new.fan_mode != self.fan_mode:
             return True
-
-        # Always render on minute change (for time display)
-        if current_minute != self.last_minute:
+        if new.last_minute != self.last_minute:
             return True
-
-        # Check IP change
-        if ip_address != self.ip_address:
+        if new.ip_address != self.ip_address:
             return True
-
-        # Check percentage-based values
-        if abs(cpu_usage - self.cpu_usage) >= CHANGE_THRESHOLD_PERCENT:
+        if any(abs(getattr(new, f) - getattr(self, f)) >= CHANGE_THRESHOLD_PERCENT
+               for f in self._PERCENT_FIELDS):
             return True
-        if abs(memory_usage - self.memory_usage) >= CHANGE_THRESHOLD_PERCENT:
+        if any(abs(getattr(new, f) - getattr(self, f)) >= CHANGE_THRESHOLD_TEMP
+               for f in self._TEMP_FIELDS):
             return True
-        if abs(disk_percent - self.disk_percent) >= CHANGE_THRESHOLD_PERCENT:
-            return True
-        if abs(disk0_percent - self.disk0_percent) >= CHANGE_THRESHOLD_PERCENT:
-            return True
-        if abs(disk1_percent - self.disk1_percent) >= CHANGE_THRESHOLD_PERCENT:
-            return True
-
-        # Check temperature
-        if abs(cpu_temperature - self.cpu_temperature) >= CHANGE_THRESHOLD_TEMP:
-            return True
-
-        # Check network speeds (use relative change for speed)
-        if self.rx_speed > 0 and abs(rx_speed - self.rx_speed) / max(self.rx_speed, 1) > 0.1:
-            return True
-        if self.tx_speed > 0 and abs(tx_speed - self.tx_speed) / max(self.tx_speed, 1) > 0.1:
-            return True
-        # Also trigger on speed appearing/disappearing
-        if (rx_speed > 100) != (self.rx_speed > 100):
-            return True
-        if (tx_speed > 100) != (self.tx_speed > 100):
-            return True
-
+        for attr in self._SPEED_FIELDS:
+            prev, curr = getattr(self, attr), getattr(new, attr)
+            if prev > 0 and abs(curr - prev) / max(prev, 1) > 0.1:
+                return True
+            if (curr > 100) != (prev > 100):
+                return True
         return False
 
-    def update(
-        self,
-        cpu_usage: float,
-        memory_usage: float,
-        disk_percent: float,
-        cpu_temperature: float,
-        rx_speed: float,
-        tx_speed: float,
-        disk0_percent: float,
-        disk1_percent: float,
-        ip_address: str,
-        display_mode: 'DisplayMode',
-        fan_mode: 'FanMode',
-        current_minute: int
-    ) -> None:
-        """Update the cache with current values."""
-        self.cpu_usage = cpu_usage
-        self.memory_usage = memory_usage
-        self.disk_percent = disk_percent
-        self.cpu_temperature = cpu_temperature
-        self.rx_speed = rx_speed
-        self.tx_speed = tx_speed
-        self.disk0_percent = disk0_percent
-        self.disk1_percent = disk1_percent
-        self.ip_address = ip_address
-        self.display_mode = display_mode
-        self.fan_mode = fan_mode
-        self.last_minute = current_minute
+    def update(self, new: 'RenderCache') -> None:
+        """Update the cache with values from a new RenderCache snapshot."""
+        for f in ('cpu_usage', 'memory_usage', 'disk_percent', 'cpu_temperature',
+                  'rx_speed', 'tx_speed', 'disk0_percent', 'disk1_percent',
+                  'ip_address', 'display_mode', 'fan_mode', 'last_minute'):
+            setattr(self, f, getattr(new, f))
 
 
 class Display:
@@ -604,45 +549,26 @@ class Display:
                 disk_params = snapshot['disk_parameters']
                 disk_usage = snapshot['disk_usage']
 
-                # Extract values with defaults for None safety
-                disk_percent = disk_usage.percent if disk_usage else 0.0
-                disk0_pct = disk_params.disk0.used_percentage if disk_params else 0.0
-                disk1_pct = disk_params.disk1.used_percentage if disk_params else 0.0
-
-                # Check if we need to render
-                should_render = self._force_render or self._render_cache.has_significant_change(
+                new_cache = RenderCache(
                     cpu_usage=snapshot['cpu_usage'],
                     memory_usage=snapshot['memory_usage'],
-                    disk_percent=disk_percent,
+                    disk_percent=disk_usage.percent if disk_usage else 0.0,
                     cpu_temperature=snapshot['cpu_temperature'],
                     rx_speed=snapshot['rx_speed'],
                     tx_speed=snapshot['tx_speed'],
-                    disk0_percent=disk0_pct,
-                    disk1_percent=disk1_pct,
+                    disk0_percent=disk_params.disk0.used_percentage if disk_params else 0.0,
+                    disk1_percent=disk_params.disk1.used_percentage if disk_params else 0.0,
                     ip_address=snapshot['ip_address'],
                     display_mode=self.display_mode,
                     fan_mode=self.fan_mode,
-                    current_minute=current_minute
+                    last_minute=current_minute,
                 )
+
+                should_render = self._force_render or self._render_cache.has_significant_change(new_cache)
 
                 if should_render:
                     self._force_render = False
-
-                    # Update cache
-                    self._render_cache.update(
-                        cpu_usage=snapshot['cpu_usage'],
-                        memory_usage=snapshot['memory_usage'],
-                        disk_percent=disk_percent,
-                        cpu_temperature=snapshot['cpu_temperature'],
-                        rx_speed=snapshot['rx_speed'],
-                        tx_speed=snapshot['tx_speed'],
-                        disk0_percent=disk0_pct,
-                        disk1_percent=disk1_pct,
-                        ip_address=snapshot['ip_address'],
-                        display_mode=self.display_mode,
-                        fan_mode=self.fan_mode,
-                        current_minute=current_minute
-                    )
+                    self._render_cache.update(new_cache)
 
                     # Render the appropriate HMI screen
                     if self.display_mode == DisplayMode.DEVICE_STATUS:
