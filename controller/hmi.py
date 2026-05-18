@@ -2,7 +2,7 @@ import logging
 import math
 import os
 import time
-from typing import Optional, Tuple
+from typing import Tuple
 
 import humanize
 from PIL import Image, ImageDraw, ImageFont

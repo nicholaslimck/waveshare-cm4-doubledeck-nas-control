@@ -250,7 +250,11 @@ class SystemParameters:
         Returns:
             Dictionary with current values, safe to read from other threads.
             disk_parameters is a frozen DiskSnapshot to avoid sharing the live
-            mutable StorageParameters object across thread boundaries.
+            mutable StorageParameters object across thread boundaries. Note: disk
+            fields are copied atomically per-attribute but not as a unit — capacity
+            and used_percentage may originate from adjacent update cycles if the
+            monitoring thread is mid-update. This is pre-existing and acceptable
+            for a display application.
         """
         with self._lock:
             dp = self.disk_parameters

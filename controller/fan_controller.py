@@ -1,5 +1,6 @@
 import logging
 import math
+import threading
 import time
 from enum import Enum, auto
 from typing import Callable, Optional
@@ -86,12 +87,23 @@ class FanController:
         system_parameters,
         on_error: Optional[Callable[[], None]] = None,
     ) -> None:
-        self.fan_mode: FanMode = FanMode.DEFAULT
+        self._fan_mode: FanMode = FanMode.DEFAULT
+        self._fan_mode_lock: threading.Lock = threading.Lock()
         self._disp = disp
         self._system_parameters = system_parameters
         self._on_error = on_error
         self._last_fan_temp: float = 0.0
         self._current_fan_speed: int = 0
+
+    @property
+    def fan_mode(self) -> FanMode:
+        with self._fan_mode_lock:
+            return self._fan_mode
+
+    @fan_mode.setter
+    def fan_mode(self, value: FanMode) -> None:
+        with self._fan_mode_lock:
+            self._fan_mode = value
 
     def set_speed(self, speed: int) -> None:
         """Set fan PWM speed (0-100). Values > 0 are scaled above FAN_MIN_DUTY_CYCLE."""
