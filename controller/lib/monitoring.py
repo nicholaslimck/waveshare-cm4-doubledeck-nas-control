@@ -112,6 +112,20 @@ class Disk:
         return {}
 
 
+@dataclass(frozen=True)
+class DiskSnapshot:
+    """Immutable snapshot of disk state, safe to share across threads."""
+    disk0_capacity: int
+    disk0_available: int
+    disk0_used_percentage: float
+    disk0_temperature: int
+    disk1_capacity: int
+    disk1_available: int
+    disk1_used_percentage: float
+    disk1_temperature: int
+    raid: bool
+
+
 @dataclass
 class StorageParameters:
     """Storage parameters for monitoring multiple disks."""
@@ -235,8 +249,22 @@ class SystemParameters:
 
         Returns:
             Dictionary with current values, safe to read from other threads.
+            disk_parameters is a frozen DiskSnapshot to avoid sharing the live
+            mutable StorageParameters object across thread boundaries.
         """
         with self._lock:
+            dp = self.disk_parameters
+            disk_snapshot = DiskSnapshot(
+                disk0_capacity=dp.disk0.capacity,
+                disk0_available=dp.disk0.available,
+                disk0_used_percentage=dp.disk0.used_percentage,
+                disk0_temperature=dp.disk0.temperature,
+                disk1_capacity=dp.disk1.capacity,
+                disk1_available=dp.disk1.available,
+                disk1_used_percentage=dp.disk1.used_percentage,
+                disk1_temperature=dp.disk1.temperature,
+                raid=dp.raid,
+            ) if dp else None
             return {
                 'cpu_usage': self.cpu_usage,
                 'memory_usage': self.memory_usage,
@@ -245,7 +273,7 @@ class SystemParameters:
                 'tx_speed': self.tx_speed,
                 'ip_address': self.ip_address,
                 'disk_usage': self.disk_usage,
-                'disk_parameters': self.disk_parameters,
+                'disk_parameters': disk_snapshot,
                 'flag': self.flag,
             }
 

@@ -497,7 +497,7 @@ class Display:
         disk_params = snapshot['disk_parameters']
         if disk_params is None:
             return
-        if not has_disk_warning(disk_params.disk0.capacity, disk_params.disk1.capacity):
+        if not has_disk_warning(disk_params.disk0_capacity, disk_params.disk1_capacity):
             return
         if snapshot['flag'] > 0:
             draw.text((x_detected, y), WARN_DETECTED_NOT_INSTALLED, fill=color, font=font)
@@ -564,8 +564,8 @@ class Display:
             cpu_temperature=snapshot['cpu_temperature'],
             rx_speed=snapshot['rx_speed'],
             tx_speed=snapshot['tx_speed'],
-            disk0_percent=disk_params.disk0.used_percentage if disk_params else 0.0,
-            disk1_percent=disk_params.disk1.used_percentage if disk_params else 0.0,
+            disk0_percent=disk_params.disk0_used_percentage if disk_params else 0.0,
+            disk1_percent=disk_params.disk1_used_percentage if disk_params else 0.0,
             ip_address=snapshot['ip_address'],
             display_mode=self.display_mode,
             fan_mode=self.fan_mode,
@@ -622,8 +622,8 @@ class Display:
                 snapshot = self.system_parameters.get_snapshot()
                 cpu_temp = snapshot['cpu_temperature']
                 disk_params = snapshot['disk_parameters']
-                disk0_temp = disk_params.disk0.temperature if disk_params else 0
-                disk1_temp = disk_params.disk1.temperature if disk_params else 0
+                disk0_temp = disk_params.disk0_temperature if disk_params else 0
+                disk1_temp = disk_params.disk1_temperature if disk_params else 0
 
                 # Calculate weighted reference temperature
                 ref_temp = get_weighted_temp(cpu_temp, disk0_temp, disk1_temp)
@@ -754,10 +754,10 @@ class Display:
         disk_parameters = snapshot['disk_parameters']
         if disk_parameters is not None:
             draw_disk_bar(draw, 40, 177, 102, 13,
-                          disk_parameters.disk0.used_percentage, disk_parameters.disk0.capacity,
+                          disk_parameters.disk0_used_percentage, disk_parameters.disk0_capacity,
                           font=FONT_SMALL)
             draw_disk_bar(draw, 40, 197, 102, 13,
-                          disk_parameters.disk1.used_percentage, disk_parameters.disk1.capacity,
+                          disk_parameters.disk1_used_percentage, disk_parameters.disk1_capacity,
                           font=FONT_SMALL)
 
             # RAID indicator
@@ -827,17 +827,17 @@ class Display:
         disk_parameters = snapshot['disk_parameters']
         if disk_parameters is not None:
             # Disk 0
-            disk0_pct = min(disk_parameters.disk0.used_percentage, 100)
-            draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0.available), fill=COLOR_GRAY, font=FONT_LABEL)
-            if disk_parameters.disk0.capacity == 0:
+            disk0_pct = min(disk_parameters.disk0_used_percentage, 100)
+            draw.text((240, 93), humanize.naturalsize(disk_parameters.disk0_available), fill=COLOR_GRAY, font=FONT_LABEL)
+            if disk_parameters.disk0_capacity == 0:
                 draw.rectangle((186, 110, 273, 113), fill=0x000000)
             else:
                 draw.rectangle((186, 110, 186 + (disk0_pct * 87 / 100), 113), fill=COLOR_PURPLE)
 
             # Disk 1
-            disk1_pct = min(disk_parameters.disk1.used_percentage, 100)
-            draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1.available), fill=COLOR_GRAY, font=FONT_LABEL)
-            if disk_parameters.disk1.capacity == 0:
+            disk1_pct = min(disk_parameters.disk1_used_percentage, 100)
+            draw.text((240, 114), humanize.naturalsize(disk_parameters.disk1_available), fill=COLOR_GRAY, font=FONT_LABEL)
+            if disk_parameters.disk1_capacity == 0:
                 draw.rectangle((186, 131, 273, 134), fill=0x000000)
             else:
                 draw.rectangle((186, 131, 186 + (disk1_pct * 87 / 100), 134), fill=COLOR_PURPLE)
