@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import time
 from typing import Tuple
@@ -121,11 +120,11 @@ def draw_disk_bar(
 def format_speed(speed: float) -> Tuple[str, int]:
     """Format network speed with unit and color."""
     if speed < 1024:
-        return f"{math.floor(speed)}B/s", COLOR_GRAY
+        return f"{int(speed)}B/s", COLOR_GRAY
     elif speed < 1024 * 1024:
-        return f"{math.floor(speed / 1024)}KB/s", COLOR_CYAN
+        return f"{int(speed / 1024)}KB/s", COLOR_CYAN
     else:
-        return f"{math.floor(speed / 1024 / 1024)}MB/s", COLOR_LIGHT_GREEN
+        return f"{int(speed / 1024 / 1024)}MB/s", COLOR_LIGHT_GREEN
 
 
 def draw_centered_percentage(
@@ -137,7 +136,7 @@ def draw_centered_percentage(
     color: int,
 ) -> None:
     """Draw percentage text with digit-count-based center alignment."""
-    text = f"{math.floor(value)}%"
+    text = f"{int(value)}%"
     if value >= 100:
         offset = -6
     elif value >= 10:
@@ -215,12 +214,13 @@ class Hmi1Renderer:
         draw.arc(HMI1_TEMP_ARC, 0, 360, fill=COLOR_WHITE, width=8)
         return image
 
-    def render(self, snapshot: dict, has_error: bool, fan_mode: FanMode) -> Image.Image:
+    def render(self, snapshot: dict, has_error: bool, fan_mode: FanMode,
+               now: time.struct_time) -> Image.Image:
         """Render Device Status screen and return the composed image."""
         image = self._base.copy()
         draw = ImageDraw.Draw(image)
 
-        time_t = time.strftime(DATETIME_FORMAT, time.localtime())
+        time_t = time.strftime(DATETIME_FORMAT, now)
         draw.text((5, 50), time_t, fill=COLOR_GOLD, font=font02_15)
         draw.text((170, 50), f'IP : {snapshot["ip_address"]}', fill=COLOR_GOLD, font=font02_15)
 
@@ -238,7 +238,7 @@ class Hmi1Renderer:
         draw.arc(HMI1_RAM_ARC, -90, calculate_arc_angle(memory_usage), fill=COLOR_YELLOW, width=8)
 
         temp_t = snapshot['cpu_temperature']
-        draw.text((268, 100), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_VALUE_LARGE)
+        draw.text((268, 100), f'{int(temp_t)}℃', fill=COLOR_BLUE, font=FONT_VALUE_LARGE)
         draw.arc(HMI1_TEMP_ARC, -90, calculate_arc_angle(temp_t), fill=COLOR_BLUE, width=8)
 
         tx_text, tx_color = format_speed(snapshot['tx_speed'])
@@ -286,12 +286,13 @@ class Hmi2Renderer:
         draw.text((133, 205), 'TEMP:', fill=COLOR_BLUE, font=font02_15)
         return image
 
-    def render(self, snapshot: dict, has_error: bool, fan_mode: FanMode) -> Image.Image:
+    def render(self, snapshot: dict, has_error: bool, fan_mode: FanMode,
+               now: time.struct_time) -> Image.Image:
         """Render Storage Focus screen and return the composed image."""
         image = self._base.copy()
         draw = ImageDraw.Draw(image)
 
-        time_t = time.strftime(DATETIME_FORMAT, time.localtime())
+        time_t = time.strftime(DATETIME_FORMAT, now)
         draw.text((40, 10), time_t, fill=COLOR_WHITE, font=font02_15)
         draw.text((155, 58), f'IP : {snapshot["ip_address"]}', fill=COLOR_GRAY, font=font02_17)
 
@@ -310,7 +311,7 @@ class Hmi2Renderer:
                 draw.rectangle((45, 180, 45 + ((disk_usage.free / disk_usage.total) * 87), 183), fill=COLOR_PURPLE)
 
         temp_t = snapshot['cpu_temperature']
-        draw.text((170, 205), f'{math.floor(temp_t)}℃', fill=COLOR_BLUE, font=FONT_LABEL)
+        draw.text((170, 205), f'{int(temp_t)}℃', fill=COLOR_BLUE, font=FONT_LABEL)
 
         tx_text, tx_color = format_speed(snapshot['tx_speed'])
         rx_text, rx_color = format_speed(snapshot['rx_speed'])

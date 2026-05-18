@@ -225,15 +225,16 @@ class Display:
             self._force_render = True
 
         snapshot = self.system_parameters.get_snapshot()
-        new_cache = self._build_cache(snapshot, now.tm_min)
+        fan_mode = self._fan.fan_mode  # single lock acquire for the whole tick
+        new_cache = self._build_cache(snapshot, now.tm_min, fan_mode)
 
         if self._force_render or self._render_cache.has_significant_change(new_cache):
             self._force_render = False
             self._render_cache.update(new_cache)
-            self._dispatch_render(snapshot)
+            self._dispatch_render(snapshot, fan_mode, now)
             self._track_render_success()
 
-    def _build_cache(self, snapshot: dict, current_minute: int) -> RenderCache:
+    def _build_cache(self, snapshot: dict, current_minute: int, fan_mode: 'FanMode') -> RenderCache:
         """Build a RenderCache from a system snapshot for change detection."""
         disk_params = snapshot['disk_parameters']
         disk_usage = snapshot['disk_usage']
@@ -248,16 +249,16 @@ class Display:
             disk1_percent=disk_params.disk1_used_percentage if disk_params else 0.0,
             ip_address=snapshot['ip_address'],
             display_mode=self.display_mode,
-            fan_mode=self._fan.fan_mode,
+            fan_mode=fan_mode,
             last_minute=current_minute,
         )
 
-    def _dispatch_render(self, snapshot: dict) -> None:
+    def _dispatch_render(self, snapshot: dict, fan_mode: 'FanMode', now: time.struct_time) -> None:
         """Dispatch to the correct HMI renderer based on current display mode."""
         if self.display_mode == DisplayMode.DEVICE_STATUS:
-            image = self._hmi1.render(snapshot, self._has_error, self._fan.fan_mode)
+            image = self._hmi1.render(snapshot, self._has_error, fan_mode, now)
         else:
-            image = self._hmi2.render(snapshot, self._has_error, self._fan.fan_mode)
+            image = self._hmi2.render(snapshot, self._has_error, fan_mode, now)
         self.disp.ShowImage(image)
 
     def _track_render_success(self) -> None:
