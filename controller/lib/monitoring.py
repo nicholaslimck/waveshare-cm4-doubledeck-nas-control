@@ -32,6 +32,9 @@ DISK_TEMP_UPDATE_INTERVAL = int(os.environ.get('NAS_DISK_TEMP_INTERVAL', '30'))
 # lsblk cache TTL (disk structure rarely changes, so cache results)
 LSBLK_CACHE_TTL = int(os.environ.get('NAS_LSBLK_CACHE_TTL', '10'))
 
+# IP address refresh interval (socket syscall is cheap but unnecessary every second)
+IP_REFRESH_INTERVAL = 30
+
 
 # =============================================================================
 # Data Classes
@@ -204,6 +207,9 @@ class SystemParameters:
     _prev_tx_bytes: Optional[int] = field(default=None, repr=False)
     _prev_net_time: float = field(default=0.0, repr=False)
 
+    # IP address refresh throttle
+    _last_ip_update: float = field(default=0.0, repr=False)
+
     def __post_init__(self) -> None:
         """Initialize storage parameters and disk usage with configured values."""
         if not self.disk_parameters:
@@ -251,15 +257,18 @@ class SystemParameters:
 
     def _update_ip_address(self) -> None:
         """Update IP address by attempting connection to external host."""
+        now = time.time()
+        if now - self._last_ip_update < IP_REFRESH_INTERVAL:
+            return
         s = None
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(2)
             s.connect_ex(('8.8.8.8', 80))
             self.ip_address = s.getsockname()[0]
+            self._last_ip_update = now
         except (socket.error, OSError) as e:
             logging.debug(f"Error getting IP address: {e}")
-            # Keep previous IP address
         finally:
             if s is not None:
                 s.close()
