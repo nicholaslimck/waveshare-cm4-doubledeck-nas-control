@@ -166,7 +166,7 @@ class StorageParameters:
     def update(self) -> None:
         """Update storage parameters from lsblk output."""
         data = self._get_lsblk_data()
-        if not data:
+        if data is None:
             return
         devices = data.get('blockdevices', [])
         if not devices:

@@ -114,7 +114,7 @@ def draw_disk_bar(
         fill_width = clamped_percent * (width - 2) / 100
         draw.rectangle((x + 1, y + 1, x + 1 + fill_width, y + height - 1), fill=fill_color)
         if show_percentage:
-            text_x = x + width // 2 - 10
+            text_x = x + width // 2 - 11
             draw.text((text_x, y - 1), f'{int(used_percentage)}%', fill=text_color, font=font)
 
 

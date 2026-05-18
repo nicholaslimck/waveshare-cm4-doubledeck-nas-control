@@ -37,8 +37,8 @@ FAN_MODE_TOGGLE_THRESHOLD = 20      # 2.0 seconds hold
 REFRESH_INTERVAL = float(os.environ.get('NAS_REFRESH_INTERVAL', '0.5'))
 
 # Change detection thresholds for skip-render optimization
-CHANGE_THRESHOLD_PERCENT = 1.0
-CHANGE_THRESHOLD_TEMP = 0.5
+CHANGE_THRESHOLD_PERCENT = 1.0  # Skip render if values changed less than this
+CHANGE_THRESHOLD_TEMP = 0.5     # Temperature change threshold
 
 # Display brightness (0-100, configurable via environment variables)
 BRIGHTNESS_DEFAULT = int(os.environ.get('NAS_BRIGHTNESS_DEFAULT', '100'))
@@ -132,7 +132,7 @@ class Display:
         self.disp.Init()
         self.disp.clear()
 
-        self._fan = FanController(self.disp, self.system_parameters)
+        self._fan = FanController(self.disp, self.system_parameters, on_error=self._on_hardware_error)
         self._hmi1 = Hmi1Renderer()
         self._hmi2 = Hmi2Renderer()
 
@@ -179,6 +179,11 @@ class Display:
                         self.display_mode = DisplayMode.DEVICE_STATUS
                     self._reset_activity()
 
+    def _on_hardware_error(self) -> None:
+        """Called by background threads to surface hardware errors to the display."""
+        self._has_error = True
+        self._successful_renders = 0
+
     def _reset_activity(self) -> None:
         """Reset the activity timer and restore full brightness."""
         self._last_activity_time = time.time()
@@ -205,8 +210,7 @@ class Display:
                 time.sleep(REFRESH_INTERVAL)
             except IOError as e:
                 logging.warning(e)
-                self._has_error = True
-                self._successful_renders = 0
+                self._on_hardware_error()
             except KeyboardInterrupt:
                 self.disp.module_exit()
                 logging.info("quit:")

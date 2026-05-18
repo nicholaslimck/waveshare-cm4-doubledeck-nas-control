@@ -2,6 +2,7 @@ import logging
 import math
 import time
 from enum import Enum, auto
+from typing import Callable, Optional
 
 
 class FanMode(Enum):
@@ -79,10 +80,16 @@ def get_weighted_temp(cpu: float, disk0: float, disk1: float) -> float:
 class FanController:
     """PWM fan controller with temperature-based speed curves and ramp limiting."""
 
-    def __init__(self, disp, system_parameters) -> None:
+    def __init__(
+        self,
+        disp,
+        system_parameters,
+        on_error: Optional[Callable[[], None]] = None,
+    ) -> None:
         self.fan_mode: FanMode = FanMode.DEFAULT
         self._disp = disp
         self._system_parameters = system_parameters
+        self._on_error = on_error
         self._last_fan_temp: float = 0.0
         self._current_fan_speed: int = 0
 
@@ -123,5 +130,7 @@ class FanController:
 
             except Exception as e:
                 logging.warning(f"Fan control error: {e}")
+                if self._on_error:
+                    self._on_error()
 
             time.sleep(FAN_CONTROL_INTERVAL)
