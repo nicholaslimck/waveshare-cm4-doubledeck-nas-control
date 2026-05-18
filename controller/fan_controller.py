@@ -1,5 +1,4 @@
 import logging
-import math
 import threading
 import time
 from enum import Enum, auto
@@ -83,13 +82,13 @@ class FanController:
 
     def __init__(
         self,
-        disp,
+        set_fan_duty: Callable[[int], None],
         system_parameters,
         on_error: Optional[Callable[[], None]] = None,
     ) -> None:
         self._fan_mode: FanMode = FanMode.DEFAULT
         self._fan_mode_lock: threading.Lock = threading.Lock()
-        self._disp = disp
+        self._set_fan_duty = set_fan_duty
         self._system_parameters = system_parameters
         self._on_error = on_error
         self._last_fan_temp: float = 0.0
@@ -107,14 +106,11 @@ class FanController:
 
     def set_speed(self, speed: int) -> None:
         """Set fan PWM speed (0-100). Values > 0 are scaled above FAN_MIN_DUTY_CYCLE."""
-        if speed:
-            duty_cycle = math.floor(
-                speed * ((100 - FAN_MIN_DUTY_CYCLE) / 100) + FAN_MIN_DUTY_CYCLE
-            )
-        else:
-            duty_cycle = 0
-        if self._disp._fan_pwm is not None:
-            self._disp._fan_pwm.ChangeDutyCycle(duty_cycle)
+        duty_cycle = (
+            int(speed * ((100 - FAN_MIN_DUTY_CYCLE) / 100) + FAN_MIN_DUTY_CYCLE)
+            if speed else 0
+        )
+        self._set_fan_duty(duty_cycle)
 
     def control(self) -> None:
         """Fan control daemon thread: weighted temp → curve lookup → ramp-limited PWM."""

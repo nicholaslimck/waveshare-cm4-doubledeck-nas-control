@@ -132,7 +132,7 @@ class Display:
         self.disp.Init()
         self.disp.clear()
 
-        self._fan = FanController(self.disp, self.system_parameters, on_error=self._on_hardware_error)
+        self._fan = FanController(self.disp.fan_DutyCycle, self.system_parameters, on_error=self._on_hardware_error)
         self._hmi1 = Hmi1Renderer()
         self._hmi2 = Hmi2Renderer()
 
