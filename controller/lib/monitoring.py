@@ -152,33 +152,27 @@ class StorageParameters:
     def update(self) -> None:
         """Update storage parameters from lsblk output."""
         data = self._get_lsblk_data()
-        if data is None:
+        if not data:
             return
-
-        blockdevices = data.get('blockdevices', [])
-        if not blockdevices:
+        devices = data.get('blockdevices', [])
+        if not devices:
             return
-
         try:
-            # Check for RAID volumes
-            for device in blockdevices:
-                device_name = device.get('name')
-                if device_name in [self.disk0.id, self.disk1.id]:
-                    fstype = device.get('fstype') or ''
-                    if 'raid' in fstype.lower():
-                        self.raid = True
-                        break
-
-            # Calculate capacity and usage of each disk
-            for device in blockdevices:
-                device_name = device.get('name')
-                for disk in [self.disk0, self.disk1]:
-                    if device_name == disk.id:
-                        if device.get('children'):
-                            disk.children = device['children']
-                            disk.update()
+            self._apply_lsblk(devices)
         except (KeyError, TypeError) as e:
             logging.debug(f"Error processing lsblk data: {e}")
+
+    def _apply_lsblk(self, devices: list) -> None:
+        """Single-pass RAID detection and disk capacity/usage update."""
+        for device in devices:
+            name = device.get('name')
+            fstype = (device.get('fstype') or '').lower()
+            if name in (self.disk0.id, self.disk1.id) and 'raid' in fstype:
+                self.raid = True
+            for disk in (self.disk0, self.disk1):
+                if name == disk.id and device.get('children'):
+                    disk.children = device['children']
+                    disk.update()
 
 
 @dataclass
