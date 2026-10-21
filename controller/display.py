@@ -96,10 +96,8 @@ class RenderCache:
 
     def update(self, new: 'RenderCache') -> None:
         """Update the cache with values from a new RenderCache snapshot."""
-        for f in ('cpu_usage', 'memory_usage', 'disk_percent', 'cpu_temperature',
-                  'rx_speed', 'tx_speed', 'disk0_percent', 'disk1_percent',
-                  'ip_address', 'display_mode', 'fan_mode', 'last_minute'):
-            setattr(self, f, getattr(new, f))
+        for name in self.__dataclass_fields__:
+            setattr(self, name, getattr(new, name))
 
 
 # =============================================================================
@@ -120,6 +118,7 @@ class Display:
         self._brightness: int = BRIGHTNESS_DEFAULT
         self._has_error: bool = False
         self._successful_renders: int = 0
+        self._state_lock: threading.Lock = threading.Lock()
         self._render_cache: RenderCache = RenderCache()
         self._force_render: bool = True
 
@@ -181,8 +180,9 @@ class Display:
 
     def _on_hardware_error(self) -> None:
         """Called by background threads to surface hardware errors to the display."""
-        self._has_error = True
-        self._successful_renders = 0
+        with self._state_lock:
+            self._has_error = True
+            self._successful_renders = 0
 
     def _reset_activity(self) -> None:
         """Reset the activity timer and restore full brightness."""
@@ -255,16 +255,21 @@ class Display:
 
     def _dispatch_render(self, snapshot: dict, fan_mode: 'FanMode', now: time.struct_time) -> None:
         """Dispatch to the correct HMI renderer based on current display mode."""
+        with self._state_lock:
+            has_error = self._has_error
         if self.display_mode == DisplayMode.DEVICE_STATUS:
-            image = self._hmi1.render(snapshot, self._has_error, fan_mode, now)
+            image = self._hmi1.render(snapshot, has_error, fan_mode, now)
         else:
-            image = self._hmi2.render(snapshot, self._has_error, fan_mode, now)
+            image = self._hmi2.render(snapshot, has_error, fan_mode, now)
         self.disp.ShowImage(image)
 
     def _track_render_success(self) -> None:
         """Increment successful render counter; clear error indicator after 10 consecutive."""
-        self._successful_renders += 1
-        if self._has_error and self._successful_renders >= 10:
+        with self._state_lock:
+            self._successful_renders += 1
+            clear_error = self._has_error and self._successful_renders >= 10
+            if clear_error:
+                self._has_error = False
+                self._successful_renders = 0
+        if clear_error:
             logging.info('Clearing error indicator after successful renders')
-            self._has_error = False
-            self._successful_renders = 0

@@ -136,8 +136,8 @@ class FanController:
                     self._current_fan_speed = target_speed
                     self.set_speed(target_speed)
 
-            except Exception as e:
-                logging.warning(f"Fan control error: {e}")
+            except Exception:
+                logging.exception("Fan control error")
                 if self._on_error:
                     self._on_error()
 

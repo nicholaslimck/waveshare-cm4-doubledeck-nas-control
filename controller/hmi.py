@@ -114,7 +114,7 @@ def draw_disk_bar(
         draw.rectangle((x + 1, y + 1, x + 1 + fill_width, y + height - 1), fill=fill_color)
         if show_percentage:
             text_x = x + width // 2 - 11
-            draw.text((text_x, y - 1), f'{int(used_percentage)}%', fill=text_color, font=font)
+            draw.text((text_x, y - 1), f'{int(clamped_percent)}%', fill=text_color, font=font)
 
 
 def format_speed(speed: float) -> Tuple[str, int]:

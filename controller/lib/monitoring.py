@@ -33,7 +33,7 @@ DISK_TEMP_UPDATE_INTERVAL = int(os.environ.get('NAS_DISK_TEMP_INTERVAL', '30'))
 LSBLK_CACHE_TTL = int(os.environ.get('NAS_LSBLK_CACHE_TTL', '10'))
 
 # IP address refresh interval (socket syscall is cheap but unnecessary every second)
-IP_REFRESH_INTERVAL = 30
+IP_REFRESH_INTERVAL = int(os.environ.get('NAS_IP_REFRESH_INTERVAL', '30'))
 
 
 # =============================================================================
@@ -188,6 +188,20 @@ class StorageParameters:
                     disk.children = device['children']
                     disk.update()
 
+    def snapshot(self) -> DiskSnapshot:
+        """Return an immutable copy of the current disk state."""
+        return DiskSnapshot(
+            disk0_capacity=self.disk0.capacity,
+            disk0_available=self.disk0.available,
+            disk0_used_percentage=self.disk0.used_percentage,
+            disk0_temperature=self.disk0.temperature,
+            disk1_capacity=self.disk1.capacity,
+            disk1_available=self.disk1.available,
+            disk1_used_percentage=self.disk1.used_percentage,
+            disk1_temperature=self.disk1.temperature,
+            raid=self.raid,
+        )
+
 
 @dataclass
 class SystemParameters:
@@ -218,12 +232,16 @@ class SystemParameters:
     # IP address refresh throttle
     _last_ip_update: float = field(default=0.0, repr=False)
 
+    # Last immutable disk snapshot published by the update thread
+    _disk_snapshot: Optional[DiskSnapshot] = field(default=None, repr=False, compare=False)
+
     def __post_init__(self) -> None:
         """Initialize storage parameters and disk usage with configured values."""
         if not self.disk_parameters:
             self.disk_parameters = StorageParameters(Disk(DISK0_ID), Disk(DISK1_ID))
         if not self.disk_usage:
             self.disk_usage = sdiskusage(total=0, used=0, free=0, percent=0)
+        self._disk_snapshot = self.disk_parameters.snapshot()
 
     def update(self) -> None:
         """Main update loop for all system parameters."""
@@ -231,6 +249,9 @@ class SystemParameters:
             try:
                 if self.disk_parameters is not None:
                     self.disk_parameters.update()
+                    disk_snapshot = self.disk_parameters.snapshot()
+                    with self._lock:
+                        self._disk_snapshot = disk_snapshot
                 self._update_ip_address()
                 self._update_cpu_usage()
                 self._update_temperature()
@@ -248,27 +269,11 @@ class SystemParameters:
         """Get a thread-safe snapshot of current system parameters.
 
         Returns:
-            Dictionary with current values, safe to read from other threads.
-            disk_parameters is a frozen DiskSnapshot to avoid sharing the live
-            mutable StorageParameters object across thread boundaries. Note: disk
-            fields are copied atomically per-attribute but not as a unit — capacity
-            and used_percentage may originate from adjacent update cycles if the
-            monitoring thread is mid-update. This is pre-existing and acceptable
-            for a display application.
+            Dictionary with current values. `disk_parameters` is the last
+            immutable `DiskSnapshot` published by the update thread, so readers
+            never observe a half-updated set of disk fields.
         """
         with self._lock:
-            dp = self.disk_parameters
-            disk_snapshot = DiskSnapshot(
-                disk0_capacity=dp.disk0.capacity,
-                disk0_available=dp.disk0.available,
-                disk0_used_percentage=dp.disk0.used_percentage,
-                disk0_temperature=dp.disk0.temperature,
-                disk1_capacity=dp.disk1.capacity,
-                disk1_available=dp.disk1.available,
-                disk1_used_percentage=dp.disk1.used_percentage,
-                disk1_temperature=dp.disk1.temperature,
-                raid=dp.raid,
-            ) if dp else None
             return {
                 'cpu_usage': self.cpu_usage,
                 'memory_usage': self.memory_usage,
@@ -277,7 +282,7 @@ class SystemParameters:
                 'tx_speed': self.tx_speed,
                 'ip_address': self.ip_address,
                 'disk_usage': self.disk_usage,
-                'disk_parameters': disk_snapshot,
+                'disk_parameters': self._disk_snapshot,
                 'flag': self.flag,
             }
 
