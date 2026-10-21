@@ -31,12 +31,16 @@ sudo pip3 install -r requirements.txt
 ### Entry Point
 `controller/main.py` creates a `Display` object and calls `display.render()` in the main loop.
 
-### Core Module: controller/display.py
-The `Display` class orchestrates everything with 4 concurrent execution paths:
+### Core Modules: controller/
+- `display.py`: `Display` orchestrator — render loop, change detection, button input, auto-dim
+- `fan_controller.py`: `FanController` — temperature curves, hysteresis, ramp limiting
+- `hmi.py`: `Hmi1Renderer`/`Hmi2Renderer` and shared drawing helpers
+
+The `Display` class orchestrates 4 concurrent execution paths:
 - **Main thread**: Refreshes LCD via `render()` with change detection to skip redundant frames
 - **Thread 1** (`system_parameters.update`): Monitors system metrics every 1s
 - **Thread 2** (`key`): Handles USER button input on GPIO 20 using edge detection
-- **Thread 3** (`control_fan`): Adjusts PWM fan speed every 5s based on temperature
+- **Thread 3** (`FanController.control`): Adjusts PWM fan speed every 5s based on temperature
 
 ### Hardware Abstraction: controller/lib/
 - `monitoring.py`: System metrics collection via psutil, /proc, /sys, smartctl
@@ -69,6 +73,7 @@ Environment variables for customization (set before running):
 | `NAS_DISK1_ID` | `sdb` | Second disk device ID |
 | `NAS_UPDATE_INTERVAL` | `1` | Monitoring update interval (seconds) |
 | `NAS_REFRESH_INTERVAL` | `0.5` | Display refresh interval (seconds) |
+| `NAS_IP_REFRESH_INTERVAL` | `30` | IP address refresh interval (seconds) |
 | `NAS_DISK_TEMP_INTERVAL` | `30` | Disk temperature polling interval (seconds) |
 | `NAS_BRIGHTNESS_DEFAULT` | `100` | Default backlight brightness (0-100) |
 | `NAS_BRIGHTNESS_DIM` | `30` | Auto-dim brightness level (0-100) |

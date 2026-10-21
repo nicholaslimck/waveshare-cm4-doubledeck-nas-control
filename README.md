@@ -85,6 +85,7 @@ Environment variables for customization:
 | `NAS_DISK1_ID`           | `sdb`   | Second disk device ID                      |
 | `NAS_UPDATE_INTERVAL`    | `1`     | Monitoring update interval (seconds)       |
 | `NAS_REFRESH_INTERVAL`   | `0.5`   | Display refresh interval (seconds)         |
+| `NAS_IP_REFRESH_INTERVAL` | `30`   | IP address refresh interval (seconds)      |
 | `NAS_DISK_TEMP_INTERVAL` | `30`    | Disk temperature polling interval (seconds)|
 
 **Example:**

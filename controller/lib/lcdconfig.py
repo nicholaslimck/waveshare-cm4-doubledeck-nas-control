@@ -158,6 +158,16 @@ class RaspberryPi:
         if self._bl_pwm is not None:
             self._bl_pwm.ChangeDutyCycle(duty)
 
+    def fan_DutyCycle(self, duty: int) -> None:
+        """
+        Set the fan PWM duty cycle.
+
+        Args:
+            duty: Duty cycle percentage (0-100).
+        """
+        if self._fan_pwm is not None:
+            self._fan_pwm.ChangeDutyCycle(duty)
+
     def bl_Frequency(self, freq: int) -> None:
         """
         Set the backlight PWM frequency.
